@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Purse Maison</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css" />
+<script>
+
+  (function loadChartJs(urls, i) {
+    if (i >= urls.length) {
+      console.error('Chart.js failed to load from all CDN sources. Charts will not render.');
+      window.__chartJsFailed = true;
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = urls[i];
+    script.onload = () => {
+      window.__chartJsReady = true;
+      window.dispatchEvent(new Event('chartjs-ready'));
+    };
+    script.onerror = () => loadChartJs(urls, i + 1);
+    document.head.appendChild(script);
+  })([
+    'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js',
+    'https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js',
+  ], 0);
+</script>
+</head>
+<body>
+
+<!-- ============================== LANDING VIEW ============================== -->
+<div id="landing-view">
+  <div class="landing-content">
+    <div class="landing-splash-logo-wrap">
+      <img class="landing-splash-logo" src="assets/images/LOGO_PURSE_MAISON-removebg-preview.png" alt="Purse Maison" />
+    </div>
+    <button id="landing-enter-btn" class="landing-swipe-button">
+      <span class="landing-swipe-chevron">^</span>
+      <span class="landing-swipe-text">Swipe Up</span>
+    </button>
+  </div>
+</div>
+
+<!-- ============================== LOGIN VIEW ============================== -->
+<div id="login-view" class="hidden">
+  <div class="login-card">
+    <button id="login-back-btn" class="login-back-link">←</button>
+    <img class="login-logo" src="assets/images/LOGO_PURSE_MAISON-removebg-preview.png" alt="Purse Maison" />
+    <h2 class="login-title">Log in</h2>
+
+    <div id="login-error" class="login-error hidden"></div>
+
+    <form id="login-form">
+      <div class="field-group">
+        <label class="field-label" for="login-username">Username</label>
+        <div class="field-input-wrap">
+          <input class="field-input" id="login-username" type="text" autocomplete="username" placeholder="Username" required />
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label" for="login-password">Password</label>
+        <div class="field-input-wrap">
+          <input class="field-input" id="login-password" type="password" autocomplete="current-password" placeholder="Password" required style="padding-right: 50px;" />
+          <button type="button" class="field-toggle" id="login-toggle-password">Show</button>
+        </div>
+      </div>
+
+      <div class="login-options-row">
+        <label class="remember-label">
+          <input type="checkbox" id="login-remember" checked /> Remember Me
+        </label>
+        <button type="button" id="login-forgot-btn" class="forgot-link">Forgot Password?</button>
+      </div>
+
+      <button type="submit" class="btn-primary" id="login-submit-btn">Log In</button>
+    </form>
+
+    <div class="login-rbac-section">
+      <div class="rbac-section-title">Quick Demo Login (Select Role)</div>
+      <div class="role-chips-grid">
+        <button type="button" class="role-chip" data-user="superadmin" data-pass="admin123" title="Full System Owner">Admin</button>
+        <button type="button" class="role-chip" data-user="manager" data-pass="manager123" title="Approvals & Analytics">Manager</button>
+        <button type="button" class="role-chip" data-user="consignment" data-pass="consignment123" title="Item Intake">Consignment</button>
+        <button type="button" class="role-chip" data-user="authenticator" data-pass="auth123" title="Authentication SLA">Authenticator</button>
+        <button type="button" class="role-chip" data-user="photographer" data-pass="photo123" title="Photo Assets">Photographer</button>
+        <button type="button" class="role-chip" data-user="designer" data-pass="design123" title="Listing Creation">Designer</button>
+        <button type="button" class="role-chip" data-user="pricing" data-pass="price123" title="Pricing & Markup">Pricing Team</button>
+        <button type="button" class="role-chip" data-user="salesassociate" data-pass="sales123" title="Client Assignment">Sales Assoc.</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== APP VIEW ================================ -->
+<div id="app-view" class="hidden">
+  <div id="sidebar-scrim" class="hidden"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-logo" src="assets/images/LOGO_PURSE_MAISON-removebg-preview.png" alt="Purse Maison" />
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+    <div class="sidebar-footer">
+      <button class="sidebar-item" id="logout-btn"><span class="sidebar-label">Log Out</span></button>
+      <button class="sidebar-item" data-route="help"><span class="sidebar-label">Help</span></button>
+    </div>
+  </aside>
+
+  <div class="main-col">
+    <div class="topbar">
+      <button class="topbar-menu-btn" id="menu-toggle-btn">☰</button>
+      <span class="topbar-title">Main</span>
+    </div>
+    <div class="panel-wrap">
+      <div class="panel" id="page-content"><!-- rendered by router.js --></div>
+    </div>
+  </div>
+</div>
+
+<div id="modal-root"></div>
+<div id="toast-stack"></div>
+
+<script src="js/data.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/chart_data.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/pages/dashboard.js"></script>
+<script src="js/pages/inventory.js"></script>
+<script src="js/pages/consignment.js"></script>
+<script src="js/pages/clients.js"></script>
+<script src="js/pages/forecasting.js"></script>
+<script src="js/pages/settings.js"></script>
+<script src="js/pages/help.js"></script>
+<script src="js/router.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
