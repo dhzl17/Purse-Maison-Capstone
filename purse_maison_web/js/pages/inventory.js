@@ -85,7 +85,6 @@ const InventoryPage = {
     const available = allItems.filter((i) => i.status === 'available').length;
     const reserved = allItems.filter((i) => i.status === 'reserved').length;
 
-    // Unique brands for filter dropdown
     const uniqueBrands = [...new Set(allItems.map(i => i.brand).filter(Boolean))].sort();
 
     return `
@@ -185,7 +184,7 @@ const InventoryPage = {
   afterRender() {
     const items = DB.inventory;
 
-    // -- Search bar (300ms debounce) --
+    //Search bar
     const searchInput = document.getElementById('inventory-search-input');
     if (searchInput) {
       searchInput.value = this.searchKeyword;
@@ -198,7 +197,7 @@ const InventoryPage = {
       }, 300));
     }
 
-    // -- Time-range filter --
+    //Time-range filter
     const timeFilter = document.getElementById('inventory-time-filter');
     if (timeFilter) {
       timeFilter.addEventListener('change', (e) => {
@@ -208,7 +207,7 @@ const InventoryPage = {
       });
     }
 
-    // -- Brand filter --
+    //Brand filter
     const brandFilter = document.getElementById('inventory-brand-filter');
     if (brandFilter) {
       brandFilter.addEventListener('change', (e) => {
@@ -218,7 +217,7 @@ const InventoryPage = {
       });
     }
 
-    // -- Sort select --
+    //Sort select
     const sortSelect = document.getElementById('inventory-sort-select');
     if (sortSelect) {
       sortSelect.addEventListener('change', (e) => {
@@ -228,7 +227,7 @@ const InventoryPage = {
       });
     }
 
-    // -- pagination --
+    //pagination
     document.getElementById('inventory-pagination').addEventListener('click', (e) => {
       const btn = e.target.closest('[data-page]');
       if (!btn) return;
@@ -236,7 +235,7 @@ const InventoryPage = {
       Router.rerender();
     });
 
-    // -- row actions --
+    //row actions
     document.querySelectorAll('[data-edit-inv]').forEach((btn) => {
       btn.addEventListener('click', () => this.openForm(items.find((i) => i.id === btn.dataset.editInv)));
     });
@@ -254,7 +253,7 @@ const InventoryPage = {
     const addBtn = document.getElementById('btn-add-inventory');
     if (addBtn) addBtn.addEventListener('click', () => this.openForm(null));
 
-    // -- location bar chart (uses filtered items for chart) --
+    //location bar chart
     const filteredItems = this.filterAndSortItems(items);
     const byLocation = {};
     filteredItems.forEach((i) => { byLocation[i.location] = (byLocation[i.location] || 0) + 1; });
@@ -267,7 +266,7 @@ const InventoryPage = {
         <div style="width:24px;text-align:right;font-size:12px;color:var(--text-muted)">${value}</div>
       </div>`).join('') : '<p class="cell-muted">No inventory yet</p>';
 
-    // -- turnover line chart (filtered by time range) --
+    //turnover line chart
     const monthCount = this.filterTimeRange === '7d' ? 1 : this.filterTimeRange === 'month' ? 1 : this.filterTimeRange === '3m' ? 3 : this.filterTimeRange === 'ytd' ? (new Date().getMonth() + 1) : 6;
     const months = lastNMonths(Math.max(1, monthCount));
     const soldCounts = monthlySoldCounts(DB.salesTransactions, months);
@@ -277,7 +276,7 @@ const InventoryPage = {
       fill: false, tension: 0.35, pointRadius: 4, pointBackgroundColor: '#10184F',
     }], { yPrefix: '' });
 
-    // -- slowest-moving leaderboard --
+    //slowest-moving leaderboard
     const inventoryById = Object.fromEntries(filteredItems.map((i) => [i.id, i]));
     const entries = [];
     for (const t of DB.salesTransactions) {
@@ -345,7 +344,7 @@ const InventoryPage = {
       } else {
         DB.inventory.push(record);
       }
-      // Auto-log a sale the moment an item flips to Sold
+     
       if (newStatus === 'sold' && !wasSold) {
         DB.salesTransactions.push({
           id: nextId('txn'), itemLabel: `${record.brand} ${record.category} (${record.id})`,

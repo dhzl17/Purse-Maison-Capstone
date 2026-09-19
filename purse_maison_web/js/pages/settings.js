@@ -170,7 +170,7 @@ const SettingsPage = {
       showToast('Notification preferences saved.');
     });
 
-    // Staff creation & removal
+    //Staff creation & removal
     const addStaffBtn = document.getElementById('btn-add-staff');
     if (addStaffBtn) addStaffBtn.addEventListener('click', () => this.openAddStaffForm());
 

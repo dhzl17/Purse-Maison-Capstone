@@ -37,7 +37,7 @@ const ClientsPage = {
     }
     if (this.sortBy === 'alphabetical') list.sort((a, b) => (a.clientName || '').localeCompare(b.clientName || ''));
     else if (this.sortBy === 'oldest') list.sort((a, b) => a.no - b.no);
-    else list.sort((a, b) => b.no - a.no); // recently (default)
+    else list.sort((a, b) => b.no - a.no);
     return list;
   },
 
@@ -134,7 +134,6 @@ const ClientsPage = {
   },
 
   afterRender() {
-    // -- Search bar (300ms debounce) --
     const searchInput = document.getElementById('clients-search-input');
     if (searchInput) {
       searchInput.value = this.searchKeyword;
@@ -146,7 +145,6 @@ const ClientsPage = {
       }, 300));
     }
 
-    // -- Sort select --
     const sortSelect = document.getElementById('clients-sort-select');
     if (sortSelect) {
       sortSelect.addEventListener('change', (e) => {

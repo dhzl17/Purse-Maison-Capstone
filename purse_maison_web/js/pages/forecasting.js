@@ -117,7 +117,7 @@ const ForecastingPage = {
       });
     });
 
-    // -- Sales Trend chart: actual monthly totals vs naive 3-month avg --
+    //Sales Trend chart
     const months = lastNMonths(6);
     const actualTotals = monthlySalesTotals(DB.salesTransactions, months);
     const lastThree = actualTotals.length >= 3 ? actualTotals.slice(-3) : actualTotals;
@@ -127,7 +127,7 @@ const ForecastingPage = {
       { data: actualTotals, borderColor: '#3247C5', pointRadius: 4, pointBackgroundColor: '#3247C5', fill: false, tension: 0.35 },
     ]);
 
-    // -- Historical vs Projected by brand --
+    //Historical vs Projected by brand
     const forecasts = DB.salesForecasts;
     makeBarChart('chart-brand-forecast', forecasts.map((f) => f.brand), [
       { label: 'Historical', data: forecasts.map((f) => parseAmountString(f.historicalSales)), backgroundColor: '#6C86FF', borderRadius: 2, maxBarThickness: 18 },

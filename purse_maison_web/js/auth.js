@@ -6,7 +6,6 @@
  * hashPassword() + Session.login() with an API call to POST /auth/login.
  */
 
-// ---- Password Hashing (Web Crypto API — SHA-256 + salt) ------------------
 /**
  * Returns a SHA-256 hex digest of (salt + password).
  * Using the browser's built-in SubtleCrypto — no external libraries needed.
@@ -119,7 +118,7 @@ const ROLES = {
 };
 
 const Session = {
-  currentUser: null, // { uid, username, email, fullName, role }
+  currentUser: null,
 
   isLoggedIn() {
     return this.currentUser !== null;
@@ -196,7 +195,6 @@ const Session = {
     if (email) this.currentUser.email = email;
     if (role && ROLES[role]) this.currentUser.role = role;
 
-    // Also sync back to DB.accounts
     const acc = DB.accounts.find(a => a.uid === this.currentUser.uid);
     if (acc) {
       acc.fullName = this.currentUser.fullName;

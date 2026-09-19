@@ -42,7 +42,7 @@ function parseDateAdded(s) {
   return new Date(y, m - 1, d);
 }
 
-// ---- Modal system ----------------------------------------------------
+//Modal system
 function openModal({ title, bodyHtml, wide = false }) {
   const root = document.getElementById('modal-root');
   const overlay = document.createElement('div');
@@ -88,7 +88,7 @@ function confirmDelete(itemLabel, onConfirm) {
   });
 }
 
-// ---- Toasts ------------------------------------------------------------
+//Toasts 
 function showToast(message) {
   const stack = document.getElementById('toast-stack');
   const el = document.createElement('div');
@@ -98,7 +98,7 @@ function showToast(message) {
   setTimeout(() => el.remove(), 3500);
 }
 
-// ---- Debounce Helper ---------------------------------------------------
+//Debounce 
 function debounce(func, wait = 300) {
   let timeout;
   return function executedFunction(...args) {
@@ -111,10 +111,9 @@ function debounce(func, wait = 300) {
   };
 }
 
-// ---- SLA Countdown Badge Helper ---------------------------------------
+//SLA Countdown
 function renderSLABadge(createdAtMs, targetHours = 24) {
   if (!createdAtMs) {
-    // Default to 18h SLA
     return `<span class="sla-badge normal">⏱ 18h 30m SLA</span>`;
   }
   const now = Date.now();
@@ -123,19 +122,19 @@ function renderSLABadge(createdAtMs, targetHours = 24) {
   const remainingMs = totalMs - elapsedMs;
 
   if (remainingMs <= 0) {
-    return `<span class="sla-badge breached">🚨 SLA Breached</span>`;
+    return `<span class="sla-badge breached">SLA Breached</span>`;
   }
 
   const hours = Math.floor(remainingMs / (3600 * 1000));
   const minutes = Math.floor((remainingMs % (3600 * 1000)) / (60 * 1000));
 
   if (hours < 4) {
-    return `<span class="sla-badge warning">⚠️ ${hours}h ${minutes}m (Urgent)</span>`;
+    return `<span class="sla-badge warning">⚠️${hours}h ${minutes}m (Urgent)</span>`;
   }
   return `<span class="sla-badge normal">⏱ ${hours}h ${minutes}m remaining</span>`;
 }
 
-// ---- Record Sorting Helper --------------------------------------------
+//Record Sorting 
 function sortRecords(records, sortBy = 'recently') {
   const list = [...records];
   switch (sortBy) {
@@ -168,7 +167,7 @@ function sortRecords(records, sortBy = 'recently') {
   }
 }
 
-// ---- Render Universal Search Bar --------------------------------------
+//Universal Search Bar
 function renderUniversalSearchBar(inputId, placeholder = 'Search by ID, Brand, Name, Serial #, Consignor...') {
   return `
 <div class="universal-search-wrap">
