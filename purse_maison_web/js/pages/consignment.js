@@ -1,8 +1,3 @@
-/**
- * Consignment Management page — mirrors screens/consignment_management_page.dart
- * + widgets/consignment_table.dart + 18-Stage Process Specification.
- */
-
 function calculateMarkup(askingPrice, category = '') {
   const price = typeof askingPrice === 'number' ? askingPrice : parseAmountString(askingPrice);
   let markup = 0;
@@ -30,10 +25,84 @@ function calculateMarkup(askingPrice, category = '') {
   return { price, markup, finalPrice, label };
 }
 
+function calculateAuthFee(provider, brand, category) {
+  const b = (brand || '').toLowerCase();
+  
+  if (provider === 'Entrupy') {
+    if (b.includes('hermès') || b.includes('hermes')) {
+      return { fee: 8500, label: 'Hermès Premium Entrupy Fee' };
+    }
+    return { fee: 1800, label: 'Standard Entrupy Fee' };
+  } 
+  
+  if (provider === 'LegitGrail') {
+    if (b.includes('chanel') || b.includes('hermès') || b.includes('hermes')) {
+      return { fee: 1800, label: 'Premium (Chanel & Hermès) Fee' };
+    }
+    return { fee: 1100, label: 'Footwear & Standard Fee' };
+  }
 
+  return { fee: 1800, label: 'Standard Fee' };
+}
+
+function renderSLABadge(createdAtMs, targetHours = 24) {
+  if (!createdAtMs) return `<span class="badge badge-info">24h SLA</span>`;
+  
+  const elapsedMs = Date.now() - createdAtMs;
+  const targetMs = targetHours * 60 * 60 * 1000;
+  const remainingMs = targetMs - elapsedMs;
+
+  if (remainingMs <= 0) {
+    return `<span class="badge badge-danger" title="SLA Breached!"> SLA Overdue</span>`;
+  }
+
+  const hoursLeft = Math.floor(remainingMs / (1000 * 60 * 60));
+  const minsLeft = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+  
+  const tone = hoursLeft < 4 ? 'danger' : (hoursLeft < 12 ? 'warning' : 'success');
+  return `<span class="badge badge-${tone}">⏱ ${hoursLeft}h ${minsLeft}m SLA</span>`;
+}
+
+function checkDuplicateConsignment(serialNumber, microchipNumber, consignorName) {
+  const sn = (serialNumber || '').trim().toLowerCase();
+  const mc = (microchipNumber || '').trim().toLowerCase();
+  const name = (consignorName || '').trim().toLowerCase();
+
+  let duplicateSerial = null;
+  let existingCustomer = null;
+
+  if (sn) {
+    duplicateSerial = DB.consignments.find(c => 
+      (c.serialNumber && c.serialNumber.trim().toLowerCase() === sn) || 
+      (c.microchipNumber && c.microchipNumber.trim().toLowerCase() === sn)
+    );
+    if (!duplicateSerial) {
+      duplicateSerial = DB.inventory.find(i => 
+        (i.serialNumber && i.serialNumber.trim().toLowerCase() === sn)
+      );
+    }
+  }
+
+  if (!duplicateSerial && mc) {
+    duplicateSerial = DB.consignments.find(c => 
+      (c.microchipNumber && c.microchipNumber.trim().toLowerCase() === mc) || 
+      (c.serialNumber && c.serialNumber.trim().toLowerCase() === mc)
+    );
+  }
+
+  if (name) {
+    existingCustomer = DB.consignments.find(c => 
+      c.consignorName && c.consignorName.trim().toLowerCase() === name
+    ) || (DB.consignorClients && DB.consignorClients.find(cl => cl.name && cl.name.trim().toLowerCase() === name));
+  }
+
+  return { duplicateSerial, existingCustomer };
+}
 
 const ConsignmentPage = {
   showAll: false,
+  searchKeyword: '',
+  sortBy: 'recently',
 
   authBadge(status) {
     if (status === 'verified') return badge('Verified', 'success');
@@ -41,10 +110,40 @@ const ConsignmentPage = {
     return badge('Pending', 'warning');
   },
 
+  doubleAuthBadge(primary, secondary) {
+    if (primary === 'verified' && secondary === 'verified') {
+      return `<span class="badge badge-success" title="Verified by Primary & Secondary authenticators">Verified</span>`;
+    }
+    if (primary === 'verified' || secondary === 'verified') {
+      return `<span class="badge badge-info" title="1 of 2 Authentications complete">1/2 Verified</span>`;
+    }
+    if (primary === 'rejected' || secondary === 'rejected') {
+      return `<span class="badge badge-danger" title="Rejected by Authenticator">Rejected</span>`;
+    }
+    return `<span class="badge badge-warning" title="Awaiting Double Authentication">Awaiting 2-Factor</span>`;
+  },
+
   payoutBadge(status) {
     const map = { notYetSold: ['Not Yet Sold', 'warning'], sold: ['Sold', 'success'], cancelled: ['Cancelled', 'danger'] };
     const [label, tone] = map[status] || ['Pending', 'info'];
     return badge(label, tone);
+  },
+
+  filterAndSortConsignments(items) {
+    let list = [...items];
+    if (this.searchKeyword) {
+      const kw = this.searchKeyword.toLowerCase();
+      list = list.filter((i) => {
+        return (
+          String(i.id || '').toLowerCase().includes(kw) ||
+          String(i.brand || '').toLowerCase().includes(kw) ||
+          String(i.itemName || '').toLowerCase().includes(kw) ||
+          String(i.serialNumber || '').toLowerCase().includes(kw) ||
+          String(i.consignorName || '').toLowerCase().includes(kw)
+        );
+      });
+    }
+    return sortRecords(list, this.sortBy);
   },
 
   nextItemId() {
@@ -91,7 +190,7 @@ const ConsignmentPage = {
   },
 
 /* ==========================================================================
-     SUBTAB 1: INQUIRIES & PRE-INTAKE (Steps 1–7)
+     SUBTAB 1: INQUIRIES & PRE-INTAKE 
      ========================================================================== */
   renderPreIntakeView() {
     const preItems = DB.consignments.filter(i => 
@@ -178,7 +277,6 @@ const ConsignmentPage = {
             <div style="font-size:12px; color:var(--text-muted);">Asking: ${escapeHtml(selectedItem.price)} · Channel: ${escapeHtml(selectedItem.contactChannel || 'Direct')}</div>
           </div>
 
-          <!-- Qualification (Steps 2-4) -->
           <div class="field-group">
             <label class="field-label">Lead Qualification Status</label>
             <select class="field-input" id="pre-lead-status" data-item-id="${selectedItem.id}">
@@ -208,7 +306,7 @@ const ConsignmentPage = {
             ` : ''}
           </div>
 
-          <!-- Fulfillment Scheduling (Steps 5-7) -->
+          
           <div class="field-group">
             <label class="field-label">Fulfillment / Receiving Method</label>
             <select class="field-input" id="pre-fulfillment-type">
@@ -232,7 +330,7 @@ const ConsignmentPage = {
   },
 
 /* ==========================================================================
-     SUBTAB 2: PHOTOGRAPHY SUBTAB (Steps 13–14)
+     SUBTAB 2: PHOTOGRAPHY SUBTAB 
      ========================================================================== */
   renderPhotographyView() {
     const photoItems = DB.consignments.filter(i => 
@@ -345,11 +443,11 @@ const ConsignmentPage = {
   },
 
 /* ==========================================================================
-     SUBTAB 3: AUTHENTICATION SUBTAB (Steps 9–12)
+     SUBTAB 3: AUTHENTICATION SUBTAB
      ========================================================================== */
-renderAuthenticationView() {
+  renderAuthenticationView() {
     const authQueue = DB.consignments.filter(i => 
-      i.authentication === 'pending' || i.status === 'Pending Authentication Payment'
+      i.authentication === 'pending' || i.status === 'Pending Authentication Payment' || i.status === 'Pending Authentication'
     );
 
     const selectedItem = window.activeAuthItemId
@@ -359,13 +457,11 @@ renderAuthenticationView() {
     return `
       <div style="margin-bottom:20px;">
         <h1 class="page-title" style="margin-bottom:4px;">Authentication Service</h1>
-        <p class="cell-muted" style="font-size:13.5px;">Manage authentication decisions, certificates, and status outcomes.</p>
+        <p class="cell-muted" style="font-size:13.5px;">Manage double-authentication decisions, certificates, 2-factor verification, and 12–24h SLA timers.</p>
       </div>
 
-      <!-- 2-Column Grid Layout (Side-by-Side) -->
       <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start;">
         
-        <!-- LEFT CARD: Queue Table -->
         <div class="card" style="margin: 0;">
           <div class="card-title" style="margin-bottom:16px;">
             <span>Authentication Queue (${authQueue.length})</span>
@@ -374,7 +470,7 @@ renderAuthenticationView() {
           <div class="table-scroll">
             <table class="data-table">
               <thead><tr>
-                <th>Item ID</th><th>Item Details</th><th>Auth Fee</th><th>Payment</th><th>Status</th><th>Action</th>
+                <th>Item ID</th><th>Item Details</th><th>24h SLA Countdown</th><th>Double Auth Verification</th><th>Status</th><th>Action</th>
               </tr></thead>
               <tbody>
                 ${authQueue.length === 0 ? '<tr><td colspan="6" class="cell-center cell-muted" style="padding: 24px;">No items pending authentication.</td></tr>' :
@@ -385,40 +481,80 @@ renderAuthenticationView() {
                       <div style="font-weight:600;">${escapeHtml(item.itemName)}</div>
                       <div class="cell-muted" style="font-size:11.5px;">SN: ${escapeHtml(item.serialNumber || 'N/A')}</div>
                     </td>
-                    <td>₱1,800</td>
-                    <td><span class="badge badge-warning">Awaiting QR PH</span></td>
+                    <td>${renderSLABadge(item.createdAtMs, 24)}</td>
+                    <td>${this.doubleAuthBadge(item.primaryAuthStatus, item.secondaryAuthStatus)}</td>
                     <td>${this.authBadge(item.authentication)}</td>
-                    <td><button class="btn-add" data-auth-select="${item.id}" data-item-id="${item.id}" style="padding:4px 8px; font-size:11px;">Select</button></td>
+                    <td>
+                      ${item.authPaymentStatus === 'Paid' ? `
+                        <button class="badge badge-success" data-auth-select="${item.id}" data-item-id="${item.id}" style="cursor: pointer; border: 1px solid #48BB78; text-decoration: none;">
+                          Paid
+                        </button>
+                      ` : `
+                        <button class="btn-confirm" data-auth-pay="${item.id}" data-item-id="${item.id}" style="padding:4px 8px; font-size:11px; background:var(--green);">
+                          Pay Fee
+                        </button>
+                      `}
+                    </td>
                   </tr>`).join('')}
               </tbody>
             </table>
           </div>
         </div>
 
-        <!-- RIGHT CARD: Control Panel -->
         <div class="card" style="margin: 0;">
-          <div class="card-title" style="margin-bottom:14px;">Authentication Panel ${selectedItem ? `(#${escapeHtml(selectedItem.id)})` : ''}</div>
+          <div class="card-title" style="margin-bottom:14px;">Double-Authentication Panel ${selectedItem ? `(#${escapeHtml(selectedItem.id)})` : ''}</div>
+          
+          ${selectedItem ? `
+            <div class="double-auth-box">
+              <div style="font-weight:600; font-size:12.5px; margin-bottom:4px; color:var(--card-navy-dark);">Item SLA Status:</div>
+              <div style="margin-bottom:8px;">${renderSLABadge(selectedItem.createdAtMs, 24)}</div>
+              <div style="font-size:11.5px; color:var(--text-muted);">Current Verification: ${this.doubleAuthBadge(selectedItem.primaryAuthStatus, selectedItem.secondaryAuthStatus)}</div>
+            </div>
+          ` : ''}
+
           <div class="field-group" style="margin-bottom: 12px;">
-            <label class="field-label">Assigned Authenticator Name</label>
-            <input class="field-input" id="auth-authenticator-input" value="${escapeHtml(selectedItem?.authenticatorName || '')}" placeholder="e.g. Dr. Arthur Pendelton" />
+            <label class="field-label">1st Primary Authenticator</label>
+            <input class="field-input" id="auth-authenticator-input" value="${escapeHtml(selectedItem?.authenticatorName || 'Dr. Arthur Pendelton')}" placeholder="e.g. Dr. Arthur Pendelton" />
           </div>
           <div class="field-group" style="margin-bottom: 12px;">
-            <label class="field-label">Upload Certificate</label>
+            <label class="field-label">1st Verification Outcome</label>
+            <select class="field-input" id="auth-primary-status">
+              <option value="verified" ${selectedItem?.primaryAuthStatus === 'verified' ? 'selected' : ''}>Verified Authentic (Pass)</option>
+              <option value="pending" ${(!selectedItem?.primaryAuthStatus || selectedItem?.primaryAuthStatus === 'pending') ? 'selected' : ''}>Pending Review</option>
+              <option value="rejected" ${selectedItem?.primaryAuthStatus === 'rejected' ? 'selected' : ''}>Counterfeit / Flagged (Fail)</option>
+            </select>
+          </div>
+
+          <div class="field-group" style="margin-bottom: 12px;">
+            <label class="field-label">2nd Secondary Verifier</label>
+            <input class="field-input" id="auth-secondary-verifier-input" value="${escapeHtml(selectedItem?.secondaryVerifierName || 'Victoria Sterling')}" placeholder="e.g. Victoria Sterling" />
+          </div>
+          <div class="field-group" style="margin-bottom: 12px;">
+            <label class="field-label">2nd Verification Outcome</label>
+            <select class="field-input" id="auth-secondary-status">
+              <option value="verified" ${selectedItem?.secondaryAuthStatus === 'verified' ? 'selected' : ''}>Verified Authentic (Pass)</option>
+              <option value="pending" ${(!selectedItem?.secondaryAuthStatus || selectedItem?.secondaryAuthStatus === 'pending') ? 'selected' : ''}>Pending Review</option>
+              <option value="rejected" ${selectedItem?.secondaryAuthStatus === 'rejected' ? 'selected' : ''}>Counterfeit / Flagged (Fail)</option>
+            </select>
+          </div>
+
+          <div class="field-group" style="margin-bottom: 12px;">
+            <label class="field-label">Upload Certificate of Authenticity</label>
             <input class="field-input" type="file" id="auth-certificate-input" accept=".pdf,image/*" />
             ${selectedItem?.certificateName ? `<div style="font-size:11.5px; color:var(--text-muted); margin-top:4px;">Attached: ${escapeHtml(selectedItem.certificateName)}</div>` : ''}
           </div>
           <div class="field-group" style="margin-bottom: 12px;">
-            <label class="field-label">Authenticator Notes / Findings</label>
-            <textarea class="field-input" id="auth-notes-input" rows="2" placeholder="e.g. Serial tag stitching verified...">${escapeHtml(selectedItem?.authNotes || '')}</textarea>
+            <label class="field-label">Authenticator Notes & Stitching Log</label>
+            <textarea class="field-input" id="auth-notes-input" rows="2" placeholder="e.g. Microchip scanned, hardware stamping and serial tag verified.">${escapeHtml(selectedItem?.authNotes || '')}</textarea>
           </div>
           <div class="field-group" style="margin-bottom: 16px;">
-            <label class="field-label">Authentication Outcome</label>
+            <label class="field-label">Final Authentication Decision</label>
             <select class="field-input" id="auth-outcome-select">
-              <option value="authentic">Authentic (Proceed to Photography)</option>
-              <option value="fake">Fake Item – Closed (Retain in Database)</option>
+              <option value="authentic">Verified Authentic (Advance to Photography)</option>
+              <option value="fake">Fake / Counterfeit Item (Close & Flag in Database)</option>
             </select>
           </div>
-          <button class="btn-confirm" style="width:100%;" id="btn-save-auth-decision" data-item-id="${selectedItem ? selectedItem.id : ''}">Submit Decision & Trigger Workflow</button>
+          <button class="btn-confirm" style="width:100%;" id="btn-save-auth-decision" data-item-id="${selectedItem ? selectedItem.id : ''}">Submit Double Auth & Advance Stage</button>
         </div>
 
       </div>
@@ -469,7 +605,6 @@ renderAuthenticationView() {
             <input class="field-input" id="design-title-input" value="${escapeHtml(activeItem.itemName)}" />
           </div>
           
-          <!-- Category Select -->
           <div class="field-group">
             <label class="field-label">Product Category</label>
             <select class="field-input" id="design-category-select">
@@ -483,7 +618,6 @@ renderAuthenticationView() {
             </select>
           </div>
 
-          <!-- Item Condition Select -->
           <div class="field-group">
             <label class="field-label">Item Condition</label>
             <select class="field-input" id="design-condition-select">
@@ -600,7 +734,7 @@ renderAuthenticationView() {
             <input class="field-input" type="file" id="intake-govt-id-image" accept="image/*" />
             <div id="govt-id-preview-container" style="display:none; margin-top:8px; align-items:center; gap:10px;">
               <img id="govt-id-preview-img" style="height:65px; border-radius:6px; border:1px solid #CBD5E1; object-fit:cover;" />
-              <span style="font-size:12px; color:var(--green); font-weight:600;">Government ID Photo Attached ✓</span>
+              <span style="font-size:12px; color:var(--green); font-weight:600;">Government ID Photo Attached</span>
             </div>
           </div>
           <div class="section-grid">
@@ -613,6 +747,20 @@ renderAuthenticationView() {
               <input class="field-input" id="intake-asking-price" placeholder="e.g. 150000" type="number" required />
             </div>
           </div>
+
+          <div class="section-grid">
+            <div class="field-group col-wide">
+              <label class="field-label">Consignment Term & Agreement Action</label>
+              <select class="field-input" id="intake-term-action-select">
+                <option value="" disabled selected>-- Select Action (Optional) --</option>
+                <option value="extend">Extend Term</option>
+                <option value="pullout">Request Pull-Out</option>
+              </select>
+            </div>
+            <div class="field-group col-wide">
+            </div>
+          </div>
+          
           <div class="field-group" style="margin-bottom:16px;">
             <label class="field-label">Accessories Included Checklist</label>
             <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:6px;">
@@ -644,7 +792,7 @@ renderAuthenticationView() {
   },
 
 /* ==========================================================================
-     SUBTAB 7: MANAGER APPROVALS SUBTAB (Steps 15 & 18)
+     SUBTAB 7: MANAGER APPROVALS SUBTAB 
      ========================================================================== */
   renderApprovalsView() {
     const approvalQueue = DB.consignments.filter(i => 
@@ -693,13 +841,23 @@ renderAuthenticationView() {
      SUBTAB 8: OVERVIEW & STATUS SUBTAB
      ========================================================================== */
   renderOverviewView() {
-    const items = DB.consignments;
-    const visible = this.showAll ? items : items.slice(0, 6);
+    const processed = this.filterAndSortConsignments(DB.consignments);
+    const visible = this.showAll ? processed : processed.slice(0, 6);
 
     return `
       <h1 class="page-title">Consignment Management</h1>
-      <div class="toolbar-row">
-        <div class="sort-row">Sort by: <strong style="color:var(--text-dark)">Recently</strong> ▾</div>
+      
+      <div class="filter-toolbar-row">
+        <div class="filter-controls-group">
+          ${renderUniversalSearchBar('consignment-search-input', 'Search by ID, Brand, Name, Serial #, Consignor...')}
+          <select class="sort-select" id="consignment-sort-select">
+            <option value="recently" ${this.sortBy === 'recently' ? 'selected' : ''}>Sort by: Recently Added (Default)</option>
+            <option value="oldest" ${this.sortBy === 'oldest' ? 'selected' : ''}>Sort by: Oldest First</option>
+            <option value="price-high" ${this.sortBy === 'price-high' ? 'selected' : ''}>Sort by: Price High to Low</option>
+            <option value="price-low" ${this.sortBy === 'price-low' ? 'selected' : ''}>Sort by: Price Low to High</option>
+            <option value="alphabetical" ${this.sortBy === 'alphabetical' ? 'selected' : ''}>Sort by: Alphabetical A-Z</option>
+          </select>
+        </div>
         <button class="btn-add" id="btn-add-consignment">+ Add Item</button>
       </div>
 
@@ -710,7 +868,8 @@ renderAuthenticationView() {
             <th>Status</th><th>Price</th><th>Payout Status</th><th>Actions</th>
           </tr></thead>
           <tbody>
-            ${visible.map((item) => {
+            ${visible.length === 0 ? '<tr><td colspan="8" class="cell-center cell-muted" style="padding:24px;">No consignment items found matching query.</td></tr>' :
+              visible.map((item) => {
               const displayImage = (item.photoSet && item.photoSet.length > 0) 
                 ? item.photoSet[0] 
                 : (item.image && item.image.startsWith('data:') ? item.image : `assets/images/${item.image || 'placeholder.png'}`);
@@ -728,7 +887,7 @@ renderAuthenticationView() {
                     </div>
                   </div>
                 </td>
-                <td class="cell-center">${this.authBadge(item.authentication)}</td>
+                <td class="cell-center">${this.doubleAuthBadge(item.primaryAuthStatus || item.authentication, item.secondaryAuthStatus || item.authentication)}</td>
                 <td class="cell-center">${escapeHtml(item.status)}</td>
                 <td class="cell-bold">${escapeHtml(item.price)}</td>
                 <td class="cell-center">${this.payoutBadge(item.payoutStatus)}</td>
@@ -742,7 +901,7 @@ renderAuthenticationView() {
         </table>
       </div>
 
-      ${items.length > 6 ? `<button class="view-all-link" id="toggle-show-all">${this.showAll ? 'Show less ▴' : 'Show all ▾'}</button>` : ''}
+      ${processed.length > 6 ? `<button class="view-all-link" id="toggle-show-all">${this.showAll ? 'Show less ▴' : 'Show all ▾'}</button>` : ''}
     `;
   },
 
@@ -750,7 +909,6 @@ renderAuthenticationView() {
      EVENT HANDLERS (afterRender)
      ========================================================================== */
   afterRender(route = 'consignment-overview') {
-    // 0. PRE-INTAKE SUBTAB HANDLER (Steps 1–7)
     if (route === 'consignment-preintake') {
       document.querySelectorAll('[data-preintake-select]').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -828,12 +986,16 @@ renderAuthenticationView() {
           const dateVal = document.getElementById('pre-appointment-date')?.value || new Date().toLocaleDateString();
 
           if (targetItem) {
+            if (String(targetItem.id).startsWith('INQ-')) {
+              targetItem.id = ConsignmentPage.nextItemId();
+            }
+
             targetItem.fulfillmentType = fulfillmentType;
             targetItem.scheduledReceivingDate = dateVal;
             targetItem.status = 'In Transit to Receiving';
 
             localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
-            showToast(`Lead #${itemId} scheduled via ${fulfillmentType}! Advanced to Step 8 (Intake).`);
+            showToast(`Lead converted to official Item #${targetItem.id}! Advanced to Step 8 (Intake).`);
             Router.navigate('consignment-intake');
           }
         });
@@ -841,7 +1003,6 @@ renderAuthenticationView() {
       return;
     }
 
-    // 1. PHOTOGRAPHY SUBTAB HANDLER
     if (route === 'consignment-photo') {
       document.querySelectorAll('.photo-status-select').forEach(select => {
         select.addEventListener('change', (e) => {
@@ -887,7 +1048,7 @@ renderAuthenticationView() {
               if (slot) {
                 slot.querySelector('.photo-preview-box').innerHTML = `<img src="${event.target.result}" style="width:100%; height:40px; object-fit:cover; border-radius:4px;" />`;
                 const statusDiv = slot.querySelector('.slot-status');
-                statusDiv.textContent = 'Uploaded ✓';
+                statusDiv.textContent = 'Uploaded';
                 statusDiv.style.color = 'var(--green)';
               }
 
@@ -928,7 +1089,6 @@ renderAuthenticationView() {
       return;
     }
 
-    // 2. AUTHENTICATION SUBTAB HANDLER (Steps 9–12)
     if (route === 'consignment-auth') {
       document.querySelectorAll('[data-auth-select]').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -937,12 +1097,23 @@ renderAuthenticationView() {
         });
       });
 
+      document.querySelectorAll('[data-auth-pay]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const id = e.currentTarget.getAttribute('data-item-id');
+          const item = DB.consignments.find(i => String(i.id) === String(id));
+          if (item) ConsignmentPage.openAuthPaymentModal(item);
+        });
+      });
+
       const saveBtn = document.getElementById('btn-save-auth-decision');
       if (saveBtn) {
         saveBtn.addEventListener('click', () => {
           const outcomeSelect = document.getElementById('auth-outcome-select');
           const outcome = outcomeSelect ? outcomeSelect.value : 'authentic';
+          const primaryStatus = document.getElementById('auth-primary-status')?.value || 'verified';
+          const secondaryStatus = document.getElementById('auth-secondary-status')?.value || 'verified';
           const authenticatorInput = document.getElementById('auth-authenticator-input');
+          const secondaryInput = document.getElementById('auth-secondary-verifier-input');
           const certInput = document.getElementById('auth-certificate-input');
           const notesInput = document.getElementById('auth-notes-input');
 
@@ -954,6 +1125,9 @@ renderAuthenticationView() {
           if (authenticatorInput && authenticatorInput.value.trim()) {
             targetItem.authenticatorName = authenticatorInput.value.trim();
           }
+          if (secondaryInput && secondaryInput.value.trim()) {
+            targetItem.secondaryVerifierName = secondaryInput.value.trim();
+          }
           if (notesInput && notesInput.value.trim()) {
             targetItem.authNotes = notesInput.value.trim();
           }
@@ -961,14 +1135,22 @@ renderAuthenticationView() {
             targetItem.certificateName = certInput.files[0].name;
           }
 
-          if (outcome === 'authentic') {
+          targetItem.primaryAuthStatus = primaryStatus;
+          targetItem.secondaryAuthStatus = secondaryStatus;
+
+          if (outcome === 'authentic' && primaryStatus === 'verified' && secondaryStatus === 'verified') {
             targetItem.authentication = 'verified';
             targetItem.status = 'For Photography';
-            showToast(`Item #${targetItem.id} verified as Authentic! Advanced to Photography.`);
-          } else {
+            showToast(`Item #${targetItem.id} Double-Verified as Authentic! Advanced to Photography.`);
+          } else if (outcome === 'fake' || primaryStatus === 'rejected' || secondaryStatus === 'rejected') {
             targetItem.authentication = 'rejected';
+            targetItem.primaryAuthStatus = 'rejected';
+            targetItem.secondaryAuthStatus = 'rejected';
             targetItem.status = 'Fake Item – Closed';
-            showToast(`Item #${targetItem.id} flagged as Fake Item – Closed and archived in database for fraud prevention.`);
+            showToast(`Item #${targetItem.id} flagged as Counterfeit – Closed and archived in database.`);
+          } else {
+            targetItem.authentication = 'pending';
+            showToast(`Item #${targetItem.id} 1st verification saved. Awaiting 2nd secondary verifier sign-off.`);
           }
 
           localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
@@ -979,7 +1161,6 @@ renderAuthenticationView() {
       return;
     }
 
-    // 3. INTAKE SUBTAB HANDLER (Step 8)
     if (route === 'consignment-intake') {
       initSignaturePad();
 
@@ -1007,30 +1188,43 @@ renderAuthenticationView() {
       if (form) {
         form.addEventListener('submit', (e) => {
           e.preventDefault();
-          const signatureData = window.getSignatureData ? window.getSignatureData() : null;
-          if (!signatureData) return showToast('Please provide an E-Signature.');
 
-          const consignorName = document.getElementById('intake-consignor-name')?.value.trim() || 'Unknown Consignor';
+          const consignorName = document.getElementById('intake-consignor-name')?.value.trim() || '';
+          const govtIdNumber = document.getElementById('intake-govt-id-number')?.value.trim() || '';
+          const serialNumber = document.getElementById('intake-serial-number')?.value.trim() || '';
+          const initialPrice = document.getElementById('intake-asking-price')?.value.trim() || '';
           const contactChannel = document.getElementById('intake-contact-channel')?.value || 'Instagram Inquiry';
           const govtIdType = document.getElementById('intake-govt-id-type')?.value || 'Passport';
-          const govtIdNumber = document.getElementById('intake-govt-id-number')?.value.trim() || 'N/A';
-          const serialNumber = document.getElementById('intake-serial-number')?.value.trim() || 'N/A';
-          const initialPrice = document.getElementById('intake-asking-price')?.value.trim() || '0';
+
+          const blockErrors = [];
+          if (!consignorName) blockErrors.push('Consignor Full Name is required.');
+          if (!govtIdNumber) blockErrors.push('Government ID Number is required.');
+          if (!currentGovtIdPhoto) blockErrors.push('Government ID Photo must be uploaded.');
+          if (!serialNumber) blockErrors.push('Serial Number / Microchip ID is required.');
+          if (!initialPrice || parseAmountString(initialPrice) <= 0) blockErrors.push('Initial Asking Price must be greater than ₱0.');
+
+          const signatureData = window.getSignatureData ? window.getSignatureData() : null;
+          if (!signatureData) blockErrors.push('E-Signature is required (please sign in the signature pad).');
+
+          if (blockErrors.length > 0) {
+            showToast(`Hard-Block: ${blockErrors[0]} (${blockErrors.length} issue(s) to resolve.)`);
+            return;
+          }
+
+          const dupCheck = checkDuplicateConsignment(serialNumber, '', consignorName);
+          if (dupCheck.duplicateSerial) {
+            showToast(`Duplicate serial number "${serialNumber}" already registered in Item #${dupCheck.duplicateSerial.id}!`);
+            return;
+          }
+          if (dupCheck.existingCustomer) {
+            showToast(`ℹRepeat Consignor Identified: ${consignorName} profile linked.`);
+          }
 
           const checkedAccessories = Array.from(document.querySelectorAll('.intake-accessory-cb:checked')).map(cb => cb.value);
 
-          // Duplicate Serial Number check across existing DB records (especially flagged fakes)
-          if (serialNumber !== 'N/A') {
-            const dup = DB.consignments.find(i => 
-              i.serialNumber && i.serialNumber !== 'N/A' && i.serialNumber.toLowerCase() === serialNumber.toLowerCase()
-            );
-            if (dup) {
-              if (dup.status === 'Fake Item – Closed' || dup.authentication === 'rejected') {
-                showToast(`⚠️ DUPLICATE DETECTED! Serial #${serialNumber} matches flagged Fake Item #${dup.id}. Queued for strict re-verification.`);
-              } else {
-                showToast(`ℹ️ Notice: Serial #${serialNumber} already exists under Record #${dup.id}.`);
-              }
-            }
+          if (window.activePreIntakeItemId) {
+            DB.consignments = DB.consignments.filter(i => String(i.id) !== String(window.activePreIntakeItemId));
+            window.activePreIntakeItemId = null;
           }
 
           const newId = ConsignmentPage.nextItemId();
@@ -1042,33 +1236,53 @@ renderAuthenticationView() {
             condition: 'Pending Review',
             image: 'placeholder.png',
             authentication: 'pending',
+            primaryAuthStatus: 'pending',
+            secondaryAuthStatus: 'pending',
+            authPaymentStatus: 'Pending',
             status: 'Pending Authentication Payment',
             price: `₱${parseAmountString(initialPrice).toLocaleString()}`,
             payoutStatus: 'notYetSold',
-            consignorName: consignorName,
-            contactChannel: contactChannel,
-            govtIdType: govtIdType,
-            govtIdNumber: govtIdNumber,
+            consignorName,
+            contactChannel,
+            govtIdType,
+            govtIdNumber,
             govtIdImage: currentGovtIdPhoto,
-            serialNumber: serialNumber,
+            serialNumber,
             accessories: checkedAccessories,
             signatureImage: signatureData,
-            dateAdded: new Date().toLocaleDateString()
+            dateAdded: new Date().toLocaleDateString(),
+            postingDate: new Date().toISOString().split('T')[0],
+            createdAtMs: Date.now(),
+            contractDays: 60,
           };
 
           DB.consignments.push(newRecord);
           localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
-          showToast(`Record #${newRecord.id} queued for Authentication!`);
+          showToast(`Record #${newRecord.id} saved! Proceeding to payment...`);
+          
           form.reset();
           currentGovtIdPhoto = null;
           if (window.clearSignaturePad) window.clearSignaturePad();
-          Router.rerender();
+
+          ConsignmentPage.openAuthPaymentModal(newRecord);
+        });
+      }
+
+      const termSelect = document.getElementById('intake-term-action-select');
+      if (termSelect) {
+        termSelect.addEventListener('change', (e) => {
+          const action = e.target.value;
+          const targetItem = DB.consignments.find(i => !String(i.id).startsWith('INQ-')) || DB.consignments[0];
+          if (targetItem) {
+            if (action === 'extend') ConsignmentPage.openExtensionModal(targetItem);
+            else if (action === 'pullout') ConsignmentPage.openPulloutModal(targetItem);
+          }
+          termSelect.value = '';
         });
       }
       return;
     }
 
-    // 4. DESIGN SUBTAB HANDLER (Step 17)
     if (route === 'consignment-design') {
       document.querySelectorAll('[data-design-select]').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -1126,7 +1340,6 @@ renderAuthenticationView() {
       return;
     }
 
-    // 5. PRICING SUBTAB HANDLER (Step 16)
     if (route === 'consignment-pricing') {
       const tableScroll = document.querySelector('.table-scroll');
       if (tableScroll) {
@@ -1153,8 +1366,7 @@ renderAuthenticationView() {
       }
       return;
     }
-
-    // 6. MANAGER APPROVALS HANDLER (Steps 15 & 18)
+    
     if (route === 'consignment-approval') {
       const tableScroll = document.querySelector('.table-scroll');
       if (tableScroll) {
@@ -1170,10 +1382,28 @@ renderAuthenticationView() {
             const targetItem = DB.consignments.find(i => String(i.id) === String(itemId));
 
             if (targetItem) {
+              const publishErrors = [];
+              if (targetItem.authentication !== 'verified' || targetItem.primaryAuthStatus !== 'verified' || targetItem.secondaryAuthStatus !== 'verified') {
+                publishErrors.push('Double Authentication (Primary + Secondary) must both be verified.');
+              }
+              if (!targetItem.photoSet || targetItem.photoSet.length < 5) {
+                publishErrors.push(`All 5 required photo angles must be uploaded (currently: ${targetItem.photoSet?.length || 0}/5).`);
+              }
+              if (!targetItem.description) {
+                publishErrors.push('Listing design / SEO description must be completed.');
+              }
+
+              if (publishErrors.length > 0) {
+                showToast(`Cannot publish. ${publishErrors[0]}`);
+                return;
+              }
+
               targetItem.status = 'Available';
               targetItem.payoutStatus = 'notYetSold';
+              targetItem.postingDate = targetItem.postingDate || new Date().toISOString().split('T')[0];
+              targetItem.shopifyProductId = targetItem.shopifyProductId || `gid://shopify/Product/${Math.floor(10000000000 + Math.random() * 90000000000)}`;
+              targetItem.shopifySyncStatus = 'synced';
 
-              // Sync automatically to DB.inventory
               const existingInv = DB.inventory.find(inv => inv.consignmentId === targetItem.id);
               if (!existingInv) {
                 let maxInv = 0;
@@ -1193,14 +1423,15 @@ renderAuthenticationView() {
                   dateAdded: todayStr,
                   transactionStatus: 'none',
                   price: targetItem.price,
-                  consignmentId: targetItem.id
+                  consignmentId: targetItem.id,
+                  shopifyProductId: targetItem.shopifyProductId,
                 };
                 DB.inventory.push(newInvItem);
                 localStorage.setItem('inventory_data', JSON.stringify(DB.inventory));
               }
 
               localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
-              showToast(`Item #${targetItem.id} approved by Manager! Published live in catalog and synced to inventory.`);
+              showToast(`Item #${targetItem.id} approved! Published live, synced to inventory and Shopify storefront (Purse Maison BGC).`);
               Router.rerender();
             }
           } else if (rejectBtn) {
@@ -1219,16 +1450,78 @@ renderAuthenticationView() {
       return;
     }
 
-    // 7. OVERVIEW HANDLER (DEFAULT)
     const items = DB.consignments;
+
+    const searchInput = document.getElementById('consignment-search-input');
+    if (searchInput) {
+      searchInput.value = this.searchKeyword;
+      searchInput.addEventListener('input', debounce((e) => {
+        this.searchKeyword = e.target.value;
+        Router.rerender();
+        const newInput = document.getElementById('consignment-search-input');
+        if (newInput) {
+          newInput.focus();
+          newInput.setSelectionRange(newInput.value.length, newInput.value.length);
+        }
+      }, 300));
+    }
+
+    const sortSelect = document.getElementById('consignment-sort-select');
+    if (sortSelect) {
+      sortSelect.addEventListener('change', (e) => {
+        this.sortBy = e.target.value;
+        Router.rerender();
+      });
+    }
+
     const addBtn = document.getElementById('btn-add-consignment');
     if (addBtn) addBtn.addEventListener('click', () => this.openForm(null));
+
+    document.querySelectorAll('[data-track-cons]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const id = e.currentTarget.getAttribute('data-track-cons');
+        const item = items.find((i) => String(i.id) === String(id));
+        if (item) this.showConsignorPortalModal(item);
+      });
+    });
+
+    document.querySelectorAll('[data-passport-cons]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const id = e.currentTarget.getAttribute('data-passport-cons');
+        const item = items.find((i) => String(i.id) === String(id));
+        if (item) this.showItemPassportModal(item);
+      });
+    });
+
+    document.querySelectorAll('[data-agreement-cons]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const id = e.currentTarget.getAttribute('data-agreement-cons');
+        const item = items.find((i) => String(i.id) === String(id));
+        if (item) this.showAgreementModal(item);
+      });
+    });
 
     document.querySelectorAll('[data-edit-cons]').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         const id = e.currentTarget.getAttribute('data-edit-cons');
         const item = items.find((i) => String(i.id) === String(id));
         if (item) this.openForm(item);
+      });
+    });
+
+    document.querySelectorAll('[data-pullout-cons]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const id = e.currentTarget.getAttribute('data-pullout-cons');
+        const item = items.find((i) => String(i.id) === String(id));
+        if (item) this.openPulloutModal(item);
+      });
+    });
+
+    document.querySelectorAll('[data-extend-cons]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const id = e.currentTarget.getAttribute('data-extend-cons');
+        const item = items.find((i) => String(i.id) === String(id));
+        if (item) this.openExtensionModal(item);
       });
     });
 
@@ -1278,7 +1571,7 @@ renderAuthenticationView() {
         <div class="field-group">
           <label class="field-label">Accessories Checklist (Inclusions)</label>
           <div style="font-size:12px; color:#475569; background:#F8FAFC; border:1px solid #E2E8F0; padding:6px 10px; border-radius:6px;">
-            ${accessoriesList.map(a => `<span class="badge badge-info" style="margin-right:4px; margin-bottom:2px; display:inline-block;">✓ ${escapeHtml(a)}</span>`).join('')}
+            ${accessoriesList.map(a => `<span class="badge badge-info" style="margin-right:4px; margin-bottom:2px; display:inline-block;"> ${escapeHtml(a)}</span>`).join('')}
           </div>
         </div>
         ${existing?.signatureImage ? `
@@ -1345,6 +1638,21 @@ renderAuthenticationView() {
             `).join('')}
           </select>
         </div>
+
+        ${isEdit ? `
+        <div class="field-group" style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-light);">
+          <label class="field-label" style="font-weight: 700;">Consignment Term & Agreement Status</label>
+          <div style="display: flex; gap: 10px; margin-top: 8px;">
+            <button type="button" id="modal-btn-extend" class="btn-secondary" style="flex: 1; border: 1px solid var(--card-navy-dark); color: var(--card-navy-dark); font-weight: 600;">
+              Extend Term
+            </button>
+            <button type="button" id="modal-btn-pullout" class="btn-secondary" style="flex: 1; border: 1px solid var(--danger-red); color: var(--danger-red); font-weight: 600;">
+              Request Pull-Out
+            </button>
+          </div>
+        </div>
+        ` : ''}
+
         <div class="modal-actions">
           <button type="button" class="btn-secondary" data-close-modal>Cancel</button>
           <button type="submit" class="btn-confirm">${isEdit ? 'Save Changes' : 'Add Item'}</button>
@@ -1355,6 +1663,18 @@ renderAuthenticationView() {
       title: isEdit ? `Edit Consignment #${id}` : 'Add Consignment Item',
       bodyHtml: html
     });
+
+    if (isEdit && existing) {
+      overlay.querySelector('#modal-btn-extend')?.addEventListener('click', () => {
+        closeModal();
+        ConsignmentPage.openExtensionModal(existing);
+      });
+
+      overlay.querySelector('#modal-btn-pullout')?.addEventListener('click', () => {
+        closeModal();
+        ConsignmentPage.openPulloutModal(existing);
+      });
+    }
 
     let modalGovtIdPhoto = existing?.govtIdImage || null;
     const modalFileInput = overlay.querySelector('#modal-govt-id-image');
@@ -1405,6 +1725,441 @@ renderAuthenticationView() {
         Router.rerender();
       });
     }
+  },
+
+  openPulloutModal(item) {
+    const postingDateMs = item.postingDate ? new Date(item.postingDate).getTime() : (item.createdAtMs || Date.now());
+    const daysSincePosting = Math.floor((Date.now() - postingDateMs) / 86400000);
+    const PULLOUT_FEE = 2500;
+    const pulloutFee = daysSincePosting <= 60 ? PULLOUT_FEE : 0;
+    const feeLabel = pulloutFee > 0 ? `₱${pulloutFee.toLocaleString()} (within 60-day window)` : '₱0 — Waived (past 60-day period)';
+    const feeClass = pulloutFee > 0 ? 'danger' : 'success';
+
+    const html = `
+      <div class="pullout-notice-card" style="margin-bottom:16px;">
+        <strong style="font-size:13.5px;">Consignor Pull-Out</strong><br/>
+        <span style="font-size:12.5px;">Item #${escapeHtml(item.id)} — ${escapeHtml(item.itemName)}</span>
+      </div>
+
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:14px; margin-bottom:16px;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12.5px;">
+          <div><span style="color:var(--text-muted);">Consignor:</span><br/><strong>${escapeHtml(item.consignorName || 'N/A')}</strong></div>
+          <div><span style="color:var(--text-muted);">Posting Date:</span><br/><strong>${escapeHtml(item.postingDate || 'N/A')}</strong></div>
+          <div><span style="color:var(--text-muted);">Days Since Posting:</span><br/><strong>${daysSincePosting} day(s)</strong></div>
+          <div><span style="color:var(--text-muted);">Item Price:</span><br/><strong>${escapeHtml(item.price)}</strong></div>
+        </div>
+      </div>
+
+      <div style="text-align:center; margin-bottom:20px;">
+        <div style="font-size:13px; color:var(--text-muted); margin-bottom:6px;">Pull-Out Fee Assessment:</div>
+        <div style="font-size:22px; font-weight:700; color:var(--${feeClass === 'danger' ? 'danger-red' : 'green'});">${feeLabel}</div>
+        ${pulloutFee > 0 ? `<div style="font-size:11.5px; color:var(--text-muted); margin-top:4px;">Policy: ₱2,500 withdrawal fee applies within the first 60 days of item posting.</div>` : `<div style="font-size:11.5px; color:var(--text-muted); margin-top:4px;">Policy: Pull-out fee has been waived — item posted more than 60 days ago.</div>`}
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Reason for Withdrawal</label>
+        <select class="field-input" id="pullout-reason-select">
+          <option value="Consignor Request">Consignor Request</option>
+          <option value="Unsatisfied with Pricing">Unsatisfied with Pricing</option>
+          <option value="Item Sold Elsewhere">Item Sold Elsewhere</option>
+          <option value="Personal Reasons">Personal Reasons</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Additional Notes</label>
+        <textarea class="field-input" id="pullout-notes-input" rows="2" placeholder="Optional withdrawal notes..."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" data-close-modal>Cancel</button>
+        <button class="btn-confirm btn-danger" id="btn-confirm-pullout" data-item-id="${escapeHtml(item.id)}">Confirm Withdrawal</button>
+      </div>
+    `;
+
+    const overlay = openModal({ title: 'Consignor Pull-Out & Withdrawal', bodyHtml: html });
+    overlay.querySelector('#btn-confirm-pullout').addEventListener('click', () => {
+      const reason = document.getElementById('pullout-reason-select')?.value || 'Consignor Request';
+      const notes = document.getElementById('pullout-notes-input')?.value.trim() || '';
+      const targetItem = DB.consignments.find(i => String(i.id) === String(item.id));
+      if (targetItem) {
+        targetItem.status = 'Return to Consignor';
+        targetItem.payoutStatus = 'cancelled';
+        targetItem.pulloutFee = pulloutFee;
+        targetItem.pulloutReason = reason;
+        targetItem.pulloutNotes = notes;
+        targetItem.pulloutDate = new Date().toLocaleDateString();
+
+        localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+        closeModal();
+        showToast(`Item #${item.id} withdrawal confirmed. Status updated to Return to Consignor.`);
+        Router.rerender();
+      }
+    });
+  },
+
+  openExtensionModal(item) {
+    const postingDate = item.postingDate || new Date().toISOString().split('T')[0];
+    const currentContractDays = item.contractDays || 90;
+    const extensionHistory = item.extensionHistory || [];
+
+    const html = `
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:14px; margin-bottom:16px; font-size:12.5px;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div><span style="color:var(--text-muted);">Item:</span><br/><strong>${escapeHtml(item.id)} — ${escapeHtml(item.itemName)}</strong></div>
+          <div><span style="color:var(--text-muted);">Consignor:</span><br/><strong>${escapeHtml(item.consignorName || 'N/A')}</strong></div>
+          <div><span style="color:var(--text-muted);">Posting Date:</span><br/><strong>${escapeHtml(postingDate)}</strong></div>
+          <div><span style="color:var(--text-muted);">Current Contract Duration:</span><br/><strong>${currentContractDays} days</strong></div>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Extension Duration</label>
+        <select class="field-input" id="extension-days-select">
+          <option value="30">+30 Days</option>
+          <option value="60">+60 Days</option>
+          <option value="90">+90 Days</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Extension Reason</label>
+        <select class="field-input" id="extension-reason-select">
+          <option value="Consignor Request">Consignor Request</option>
+          <option value="Market Timing">Market Timing</option>
+          <option value="Seasonal Extension">Seasonal Extension</option>
+          <option value="Low Season Holdover">Low Season Holdover</option>
+        </select>
+      </div>
+
+      ${extensionHistory.length > 0 ? `
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px; margin-bottom:12px;">
+        <div style="font-weight:600; font-size:12px; margin-bottom:6px; color:var(--card-navy-dark);">Extension History:</div>
+        ${extensionHistory.map(h => `
+          <div style="font-size:11px; color:var(--text-muted); border-bottom:1px dashed #E2E8F0; padding:3px 0;">
+            +${h.days} days (${h.reason}) — ${h.date}
+          </div>
+        `).join('')}
+      </div>` : ''}
+
+      <div class="modal-actions">
+        <button class="btn-secondary" data-close-modal>Cancel</button>
+        <button class="btn-confirm" id="btn-confirm-extension" data-item-id="${escapeHtml(item.id)}">Apply Extension</button>
+      </div>
+    `;
+
+    const overlay = openModal({ title: 'Consignment Duration Extension', bodyHtml: html });
+    overlay.querySelector('#btn-confirm-extension').addEventListener('click', () => {
+      const days = parseInt(document.getElementById('extension-days-select')?.value || '30', 10);
+      const reason = document.getElementById('extension-reason-select')?.value || 'Consignor Request';
+      const targetItem = DB.consignments.find(i => String(i.id) === String(item.id));
+      if (targetItem) {
+        targetItem.contractDays = (targetItem.contractDays || 90) + days;
+        targetItem.extensionHistory = targetItem.extensionHistory || [];
+        targetItem.extensionHistory.push({ days, reason, date: new Date().toLocaleDateString() });
+        localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+        closeModal();
+        showToast(`Item #${item.id} contract extended by +${days} days. New total: ${targetItem.contractDays} days.`);
+        Router.rerender();
+      }
+    });
+  },
+
+  openAuthPaymentModal(item) {
+    const defaultCalc = calculateAuthFee('Entrupy', item.brand, item.category);
+
+    const html = `
+      <div style="text-align:center; margin-bottom:16px;">
+        <strong style="font-size:14px;">Authentication Payment Required</strong><br/>
+        <span style="font-size:12.5px; color:var(--text-muted);">Item #${escapeHtml(item.id)} — ${escapeHtml(item.brand)} ${escapeHtml(item.itemName)}</span>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Select Authentication Provider</label>
+        <select class="field-input" id="auth-provider-select">
+          <option value="Entrupy" selected>Entrupy (AI Hardware Scanner)</option>
+          <option value="LegitGrail">LegitGrail (Manual & Footwear Specialist)</option>
+        </select>
+      </div>
+
+      <div style="background:#F8FAFC; border:1px solid #CBD5E1; border-radius:8px; padding:12px; margin-bottom:16px; text-align:center;">
+        <div style="font-size:12px; color:var(--text-muted);" id="auth-fee-label">${defaultCalc.label}</div>
+        <div style="font-size:24px; font-weight:700; color:var(--card-navy-dark);" id="auth-fee-amount">₱${defaultCalc.fee.toLocaleString()}</div>
+        <div style="font-size:11px; color:var(--danger-red); margin-top:2px;">Non-refundable · Paid Upfront</div>
+      </div>
+
+      <div style="text-align:center; background:#FFF; border:1px dashed #CBD5E1; border-radius:8px; padding:12px; margin-bottom:16px;">
+        <div style="font-weight:600; font-size:12px; margin-bottom:6px;">Scan via QR PH (GCash / Maya / Bank Apps)</div>
+        <div style="width:140px; height:140px; background:#EEE; margin:0 auto; display:flex; align-items:center; justify-content:center; border-radius:6px; font-size:11px; color:#666;">
+          [ QR PH CODE ]
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Reference / Transaction Number</label>
+        <input class="field-input" id="auth-payment-ref" placeholder="e.g. QPH-992019203" required />
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" data-close-modal>Cancel</button>
+        <button class="btn-confirm" id="btn-confirm-auth-payment">Confirm Payment & Advance Queue</button>
+      </div>
+    `;
+
+    const overlay = openModal({ title: 'QR PH Payment Gate', bodyHtml: html });
+
+    overlay.querySelector('#auth-provider-select')?.addEventListener('change', (e) => {
+      const calc = calculateAuthFee(e.target.value, item.brand, item.category);
+      overlay.querySelector('#auth-fee-label').textContent = calc.label;
+      overlay.querySelector('#auth-fee-amount').textContent = `₱${calc.fee.toLocaleString()}`;
+    });
+
+    overlay.querySelector('#btn-confirm-auth-payment')?.addEventListener('click', () => {
+      const refNo = overlay.querySelector('#auth-payment-ref')?.value.trim();
+      if (!refNo) {
+        showToast('Please enter the QR PH Reference Number to verify payment.');
+        return;
+      }
+
+      const provider = overlay.querySelector('#auth-provider-select').value;
+      const calc = calculateAuthFee(provider, item.brand, item.category);
+
+      const targetItem = DB.consignments.find(i => String(i.id) === String(item.id));
+      if (targetItem) {
+        targetItem.authPaymentStatus = 'Paid';
+        targetItem.authPaymentRef = refNo;
+        targetItem.authProvider = provider;
+        targetItem.authFeeAmount = calc.fee;
+        targetItem.status = 'Pending Authentication';
+
+        localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+        closeModal();
+        showToast(`Payment Confirmed (Ref #${refNo})! Item #${item.id} advanced to Authentication Queue.`);
+        Router.rerender();
+      }
+    });
+  },
+
+  showConsignorPortalModal(item) {
+    const postingDate = item.postingDate || '2026-08-01';
+    const postingDateMs = item.postingDate ? new Date(item.postingDate).getTime() : (item.createdAtMs || Date.now());
+    const daysSincePosting = Math.max(0, Math.floor((Date.now() - postingDateMs) / 86400000));
+    const contractDays = item.contractDays || 60;
+    const daysRemaining = Math.max(0, contractDays - daysSincePosting);
+    const trackingUrl = `https://pursemaison.com/track/${item.id}`;
+
+    const calc = calculateMarkup(item.price, item.category);
+    const estPayout = calc.price;
+
+    let stageIndex = 1;
+    if (item.authentication === 'verified') stageIndex = 2;
+    if (item.status === 'Pending Listing Design' || item.status === 'Pending Pricing Review' || (item.photoSet && item.photoSet.length >= 5)) stageIndex = 3;
+    if (item.status === 'Available' || item.status === 'Sold' || item.shopifyProductId) stageIndex = 4;
+    if (item.status === 'Sold' || item.payoutStatus === 'sold') stageIndex = 5;
+
+    const stages = [
+      { num: 1, title: 'Intake & Agreement', desc: `Item received & Gov ID verified (${item.consignorName || 'Consignor'})`, done: stageIndex >= 1, current: stageIndex === 1 },
+      { num: 2, title: 'Authentication Service', desc: item.authentication === 'verified' ? 'Double-Authentication Verified Authentic' : 'In authentication queue (12-24h SLA)', done: stageIndex >= 2, current: stageIndex === 2 },
+      { num: 3, title: 'Photography & Quality', desc: (item.photoSet && item.photoSet.length >= 5) ? 'High-resolution 5-angle photo set complete' : 'Scheduled for studio photography', done: stageIndex >= 3, current: stageIndex === 3 },
+      { num: 4, title: 'Listing & Publishing', desc: stageIndex >= 4 ? 'Live on Website, Showroom & Shopify' : 'Pending final pricing and publishing', done: stageIndex >= 4, current: stageIndex === 4 },
+      { num: 5, title: 'Sale & Consignor Payout', desc: item.payoutStatus === 'sold' ? 'Sold! Payout settlement initiated (1-14 banking days)' : 'Available for purchase · Payout on sale', done: stageIndex >= 5, current: stageIndex === 5 }
+    ];
+
+    const displayImage = (item.photoSet && item.photoSet.length > 0)
+      ? item.photoSet[0]
+      : (item.image && item.image.startsWith('data:') ? item.image : `assets/images/${item.image || 'placeholder.png'}`);
+
+    const html = `
+      <div class="mobile-phone-frame">
+        <div class="mobile-phone-notch"></div>
+        <div class="mobile-phone-screen">
+          <div class="mobile-phone-header">
+            <h3>PURSE MAISON</h3>
+            <p>Customer Consignment Portal</p>
+          </div>
+          <div class="mobile-phone-body">
+            <div class="mobile-item-card">
+              <img src="${displayImage}" alt="${escapeHtml(item.itemName)}" class="mobile-item-thumb" onerror="this.src='assets/images/placeholder.png'" />
+              <div>
+                <div style="font-weight:700; font-size:13px; color:#0F172A;">${escapeHtml(item.itemName)}</div>
+                <div style="font-size:11px; color:#64748B;">Item ID: #${escapeHtml(item.id)} · ${escapeHtml(item.condition)}</div>
+                <div style="font-size:12px; font-weight:700; color:#10184F; margin-top:2px;">Selling: ${escapeHtml(item.price)}</div>
+                <div style="font-size:11px; color:#059669; font-weight:600;">Est. Payout: ₱${estPayout.toLocaleString()}</div>
+              </div>
+            </div>
+
+            <div style="background:#FFF; border:1px solid #E2E8F0; border-radius:10px; padding:10px; margin-bottom:12px; font-size:11.5px;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span style="color:#64748B;">Contract Duration:</span>
+                <span style="font-weight:600;">${contractDays} Days (${daysRemaining} days left)</span>
+              </div>
+              <div style="display:flex; justify-content:space-between;">
+                <span style="color:#64748B;">Pull-Out Fee:</span>
+                <span style="font-weight:600; color:${daysSincePosting <= 60 ? '#B91C1C' : '#059669'}">${daysSincePosting <= 60 ? '₱2,500 (<60d)' : 'Waived (0d)'}</span>
+              </div>
+            </div>
+
+            <div style="font-size:12px; font-weight:700; color:#0F172A; margin-bottom:10px;">Item Lifecycle Progress:</div>
+            <div class="mobile-timeline">
+              ${stages.map((st, idx) => `
+                <div class="mobile-timeline-step">
+                  <div class="timeline-indicator-wrap">
+                    <div class="timeline-indicator-dot ${st.done ? 'active' : (st.current ? 'current' : 'pending')}">
+                      ${st.done ? '✓' : st.num}
+                    </div>
+                    ${idx < stages.length - 1 ? `<div class="timeline-indicator-line ${st.done ? 'active' : ''}"></div>` : ''}
+                  </div>
+                  <div class="mobile-step-details">
+                    <div class="mobile-step-title">${st.title}</div>
+                    <div class="mobile-step-desc">${st.desc}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+
+            <div style="margin-top:16px; display:flex; flex-direction:column; gap:8px;">
+              <button class="btn-confirm" id="btn-copy-customer-link" style="width:100%; padding:9px; font-size:12px;">
+                🔗 Copy Tracking Link (${trackingUrl})
+              </button>
+              <button class="btn-secondary" id="btn-portal-view-agreement" style="width:100%; padding:8px; font-size:12px;">
+                📜 View Signed Agreement & Terms
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const overlay = openModal({ title: `Consignor Portal Preview (Item #${item.id})`, bodyHtml: html });
+    overlay.querySelector('#btn-copy-customer-link')?.addEventListener('click', () => {
+      navigator.clipboard?.writeText(trackingUrl).then(() => {
+        showToast(`Tracking link copied to clipboard: ${trackingUrl}`);
+      }).catch(() => {
+        showToast(`Tracking link: ${trackingUrl}`);
+      });
+    });
+    overlay.querySelector('#btn-portal-view-agreement')?.addEventListener('click', () => {
+      closeModal();
+      ConsignmentPage.showAgreementModal(item);
+    });
+  },
+
+  showItemPassportModal(item) {
+    const accessoriesText = (item.accessories && item.accessories.length > 0)
+      ? item.accessories.join(', ')
+      : 'Dust Bag, Authenticity Card';
+
+    const html = `
+      <div class="passport-sheet">
+        <div class="passport-header-row">
+          <div>
+            <div style="font-size:18px; font-weight:800; letter-spacing:1px; color:#10184F;">PURSE MAISON</div>
+            <div style="font-size:11px; color:#64748B;">OFFICIAL ITEM PASSPORT & RECEIVING SLIP</div>
+          </div>
+          <div style="text-align:right;">
+            <span class="badge badge-success">AUTHENTICATED</span>
+            <div style="font-size:11px; color:#64748B; margin-top:4px;">Passport #: PM-${escapeHtml(item.id)}</div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:12.5px; margin-bottom:14px;">
+          <div><span style="color:#64748B;">Brand / Model:</span><br/><strong>${escapeHtml(item.brand)} — ${escapeHtml(item.itemName)}</strong></div>
+          <div><span style="color:#64748B;">Category & Condition:</span><br/><strong>${escapeHtml(item.category)} · ${escapeHtml(item.condition)}</strong></div>
+          <div><span style="color:#64748B;">Serial Number:</span><br/><strong style="font-family:monospace;">${escapeHtml(item.serialNumber || 'N/A')}</strong></div>
+          <div><span style="color:#64748B;">Microchip / Date Code:</span><br/><strong style="font-family:monospace;">${escapeHtml(item.microchipNumber || 'MC-' + (item.serialNumber || item.id))}</strong></div>
+          <div><span style="color:#64748B;">Consignor:</span><br/><strong>${escapeHtml(item.consignorName || 'N/A')}</strong></div>
+          <div><span style="color:#64748B;">Selling Price:</span><br/><strong>${escapeHtml(item.price)}</strong></div>
+          <div style="grid-column: span 2;"><span style="color:#64748B;">Inclusions Verified:</span><br/><strong>${escapeHtml(accessoriesText)}</strong></div>
+        </div>
+
+        <div class="barcode-box">
+          <div style="font-size:11px; color:#64748B; font-weight:600;">INVENTORY BARCODE (CODE 128)</div>
+          <div class="barcode-visual">|| | | ||| | || ||||</div>
+          <div style="font-family:monospace; font-size:13px; font-weight:700; letter-spacing:2px;">*PM-${escapeHtml(item.id)}-${escapeHtml(item.serialNumber || '000')}*</div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:10px; border-top:1px dashed #CBD5E1; font-size:11px; color:#64748B;">
+          <span>Purse Maison BGC Showroom</span>
+          <span>Security Tag Verified</span>
+          <span>${item.postingDate || new Date().toLocaleDateString()}</span>
+        </div>
+
+        <div class="modal-actions" style="margin-top:16px;">
+          <button class="btn-secondary" data-close-modal>Close</button>
+          <button class="btn-confirm" id="btn-print-passport">🖨️ Print Receiving Slip</button>
+        </div>
+      </div>
+    `;
+
+    const overlay = openModal({ title: `Item Passport (#${item.id})`, bodyHtml: html });
+    overlay.querySelector('#btn-print-passport')?.addEventListener('click', () => {
+      showToast(`Item Passport & Barcode Slip for #${item.id} sent to printer.`);
+    });
+  },
+
+  showAgreementModal(item) {
+    const consignorName = item.consignorName || 'Maria Santos';
+    const dateStr = item.postingDate || new Date().toLocaleDateString();
+    const idInfo = item.govtIdNumber ? `${item.govtIdType || 'Government ID'}: ${item.govtIdNumber}` : 'Government ID: Verified On-File';
+
+    const html = `
+      <div style="background:#FFF; padding:16px; border-radius:10px; max-height:550px; overflow-y:auto; font-size:12.5px; color:#1E293B; line-height:1.5;">
+        <div style="text-align:center; border-bottom:2px solid #0F2B48; padding-bottom:10px; margin-bottom:14px;">
+          <h2 style="font-size:16px; margin:0 0 4px; color:#10184F; letter-spacing:0.5px;">PURSE MAISON LUXURY CONSIGNMENT AGREEMENT</h2>
+          <div style="font-size:11px; color:#64748B;">Binding Terms & Operational Consignment Policy</div>
+        </div>
+
+        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px; margin-bottom:14px;">
+          <div><strong>Consignor:</strong> ${escapeHtml(consignorName)} (${escapeHtml(idInfo)})</div>
+          <div><strong>Item:</strong> #${escapeHtml(item.id)} — ${escapeHtml(item.brand)} ${escapeHtml(item.itemName)}</div>
+          <div><strong>Agreed Price:</strong> ${escapeHtml(item.price)} · <strong>Date:</strong> ${escapeHtml(dateStr)}</div>
+        </div>
+
+        <div style="margin-bottom:12px;">
+          <strong>1. Consignment Duration & Listing Period</strong>
+          <p style="margin:4px 0 8px; color:#475569;">The item shall be held and marketed for an initial period of sixty (60) calendar days from the date of official publication. The duration may be extended upon mutual written agreement between Purse Maison and the consignor.</p>
+        </div>
+
+        <div style="margin-bottom:12px;">
+          <strong>2. Pull-Out Fee Terms</strong>
+          <p style="margin:4px 0 8px; color:#475569;">A non-negotiable withdrawal fee of <strong>₱2,500</strong> shall apply if the consignor chooses to withdraw or pull out the item within the first sixty (60) days of posting. After the 60-day threshold, withdrawal is complimentary without penalty.</p>
+        </div>
+
+        <div style="margin-bottom:12px;">
+          <strong>3. Consignor Payout Settlement</strong>
+          <p style="margin:4px 0 8px; color:#475569;">Consignor payout proceeds shall be disbursed within one to fourteen (1-14) banking days following confirmed completion of the sale, net of applicable authentication and service fees.</p>
+        </div>
+
+        <div style="margin-bottom:12px;">
+          <strong>4. Layaway Financing Provision</strong>
+          <p style="margin:4px 0 8px; color:#475569;">For items priced at ₱200,000 and above, buyer layaway plans are permitted with 1% interest per month for up to three (3) months maximum. Consignor receives full agreed payout upon final settlement.</p>
+        </div>
+
+        <div style="margin-bottom:12px;">
+          <strong>5. 100% Authenticity Guarantee</strong>
+          <p style="margin:4px 0 8px; color:#475569;">All consigned merchandise undergoes multi-point double verification via Entrupy AI and expert evaluators. Items confirmed counterfeit will be immediately closed, confiscated, or returned in accordance with law.</p>
+        </div>
+
+        <div style="border-top:1px dashed #CBD5E1; padding-top:12px; margin-top:14px; display:flex; justify-content:space-between; align-items:flex-end;">
+          <div>
+            <div style="font-size:11px; color:#64748B; margin-bottom:4px;">Consignor E-Signature:</div>
+            ${item.signatureImage ? `<img src="${item.signatureImage}" style="max-height:50px; border:1px solid #CBD5E1; border-radius:4px; padding:2px;" />` : `<div style="font-family:'Brush Script MT', cursive; font-size:20px; color:#10184F;">${escapeHtml(consignorName)}</div>`}
+          </div>
+          <div style="text-align:right; font-size:11px; color:#64748B;">
+            Signed electronically on ${escapeHtml(dateStr)}<br/>
+            IP & Verification Record Logged
+          </div>
+        </div>
+
+        <div class="modal-actions" style="margin-top:16px;">
+          <button class="btn-secondary" data-close-modal>Close</button>
+          <button class="btn-confirm" id="btn-print-agreement">🖨️ Print Agreement</button>
+        </div>
+      </div>
+    `;
+
+    const overlay = openModal({ title: `Consignment Agreement (#${item.id})`, bodyHtml: html });
+    overlay.querySelector('#btn-print-agreement')?.addEventListener('click', () => {
+      showToast(`Consignment Agreement #${item.id} sent to printer.`);
+    });
   }
 };
 

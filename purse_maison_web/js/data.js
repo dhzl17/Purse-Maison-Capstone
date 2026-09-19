@@ -1,30 +1,20 @@
-/**
- * In-memory mock "database" — stands in for the Firestore collections in
- * the real app. Everything lives in plain JS arrays, seeded once on load.
- * There is no backend: reloading the page resets all data back to this
- * seed state, same as the original app looked before it was ever
- * connected to Firebase.
- *
- * Shape of each record mirrors the Firestore documents the Flutter app
- * used, right down to the same sample data (see seed/seed.js).
- */
-
-
 const DB = {
   accounts: [
-    { uid: 'acc-1', username: 'superadmin', password: 'admin123', fullName: 'Super Admin Owner', email: 'admin@pursemaison.com', role: 'superAdmin' },
-    { uid: 'acc-2', username: 'manager', password: 'manager123', fullName: 'Victoria Sterling', email: 'manager@pursemaison.com', role: 'manager' },
-    { uid: 'acc-3', username: 'consignment', password: 'consignment123', fullName: 'Claire Vance', email: 'consignment@pursemaison.com', role: 'consignmentTeam' },
-    { uid: 'acc-4', username: 'authenticator', password: 'auth123', fullName: 'Dr. Arthur Pendelton', email: 'authenticator@pursemaison.com', role: 'authenticator' },
-    { uid: 'acc-5', username: 'photographer', password: 'photo123', fullName: 'Julian Mercer', email: 'photographer@pursemaison.com', role: 'photographer' },
-    { uid: 'acc-6', username: 'designer', password: 'design123', fullName: 'Elena Rostova', email: 'designer@pursemaison.com', role: 'designer' },
-    { uid: 'acc-7', username: 'pricing', password: 'price123', fullName: 'Marcus Chen', email: 'pricing@pursemaison.com', role: 'pricingTeam' },
-    { uid: 'acc-8', username: 'salesassociate', password: 'sales123', fullName: 'Alex Rivera', email: 'sales@pursemaison.com', role: 'salesAssociate' },
+    { uid: 'acc-1', username: 'superadmin',    salt: 'pm-salt-acc-1', passwordHash: 'cec75a715f3eb53cb8259c2708ed520947b075a81d6b6bdb6026f7e508bbf2d7', fullName: 'Super Admin Owner',     email: 'admin@pursemaison.com',         role: 'superAdmin' },
+    { uid: 'acc-2', username: 'manager',        salt: 'pm-salt-acc-2', passwordHash: '9ffc996c3890acb7a1efb63e1ab5539b2a3081c635b2d7c1a4677692597a6e1e', fullName: 'Victoria Sterling',       email: 'manager@pursemaison.com',       role: 'manager' },
+    { uid: 'acc-3', username: 'consignment',    salt: 'pm-salt-acc-3', passwordHash: '24b1eaa019c3cb19f6faaee104ae04be09d1908702a8093e4cd675229389d62b', fullName: 'Claire Vance',             email: 'consignment@pursemaison.com',   role: 'consignmentTeam' },
+    { uid: 'acc-4', username: 'authenticator',  salt: 'pm-salt-acc-4', passwordHash: '472b391506d1944a9ed12e4a3eb654c5eec17c445c91d11489e796f99ad51da5', fullName: 'Dr. Arthur Pendelton',    email: 'authenticator@pursemaison.com', role: 'authenticator' },
+    { uid: 'acc-5', username: 'photographer',   salt: 'pm-salt-acc-5', passwordHash: '4d851cdc5e6e78462793a35eb64a994bdacd0a2b2003634802d893058c0b5bab', fullName: 'Julian Mercer',           email: 'photographer@pursemaison.com',  role: 'photographer' },
+    { uid: 'acc-6', username: 'designer',       salt: 'pm-salt-acc-6', passwordHash: '05f4cf5a9894dc0a1ee1a5a08992ec2af3a8e87a5a97bf7e0f1fef531beec890', fullName: 'Elena Rostova',           email: 'designer@pursemaison.com',      role: 'designer' },
+    { uid: 'acc-7', username: 'pricing',        salt: 'pm-salt-acc-7', passwordHash: '99aba899d322364323d8027b2fcff4daae324ed35a65912e28653d822c7807fb', fullName: 'Marcus Chen',             email: 'pricing@pursemaison.com',       role: 'pricingTeam' },
+    { uid: 'acc-8', username: 'salesassociate', salt: 'pm-salt-acc-8', passwordHash: '7960396f4a9cab140c1bae7003402563279b1477e90e2bc8489a5f86eb5822ce', fullName: 'Alex Rivera',             email: 'sales@pursemaison.com',         role: 'salesAssociate' },
   ],
 
   inventory: [],
   consignments: [],
   clientInquiries: [],
+  consignorClients: [],
+  consignorAssignments: [],
   salesAssociates: [],
   assignmentActivity: [],
   salesForecasts: [],
@@ -66,16 +56,36 @@ function seedDatabase() {
   }
   DB.inventory = items;
 
+  const nowMs = Date.now();
+  const dayMs = 86400000;
+
   DB.consignments = [
-    { id: '1101', brand: 'Hermès', itemName: 'Kelly 28 Epsom Noir', image: 'hermes_kelly.png', category: 'Handbag', condition: 'Very Good', authentication: 'verified', status: 'Received', price: '₱720,000', payoutStatus: 'notYetSold' },
-    { id: '1102', brand: 'Chanel', itemName: 'Chanel Boy Bag Small', image: 'chanel_boy_bag_small.png', category: 'Shoulder Bag', condition: 'Excellent', authentication: 'verified', status: 'For Photography', price: '₱265,000', payoutStatus: 'notYetSold' },
-    { id: '1103', brand: 'Louis Vuitton', itemName: 'LV OnTheGo MM', image: 'lv_onthego_mm.png', category: 'Tote', condition: 'Excellent', authentication: 'verified', status: 'Received', price: '₱165,000', payoutStatus: 'notYetSold' },
-    { id: '1104', brand: 'Prada', itemName: 'Prada Galleria Saffiano', image: 'prada_galleria_saffiano.png', category: 'Tote', condition: 'Excellent', authentication: 'rejected', status: 'Return to Consignor', price: '₱110,000', payoutStatus: 'cancelled' },
-    { id: '1105', brand: 'Gucci', itemName: 'Gucci Marmont Matelassé', image: 'gucci_marmont_matelasse.png', category: 'Crossbody', condition: 'Good', authentication: 'verified', status: 'Received', price: '₱92,000', payoutStatus: 'sold' },
-    { id: '1106', brand: 'Dior', itemName: 'Dior Saddle Bag Oblique', image: 'dior_saddle_oblique.png', category: 'Shoulder Bag', condition: 'Excellent', authentication: 'verified', status: 'Received', price: '₱240,000', payoutStatus: 'notYetSold' },
-    { id: '1107', brand: 'Fendi', itemName: 'Fendi Baguette Medium', image: 'fendi_baguette.png', category: 'Shoulder Bag', condition: 'Good', authentication: 'verified', status: 'Received', price: '₱135,000', payoutStatus: 'notYetSold' },
-    { id: '1108', brand: 'Bottega Veneta', itemName: 'Bottega Jodie Small', image: 'bottega_jodie.png', category: 'Hobo', condition: 'Very Good', authentication: 'verified', status: 'For Photography', price: '₱178,000', payoutStatus: 'notYetSold' },
-    { id: '1109', brand: 'Celine', itemName: 'Celine Triomphe Canvas', image: 'celine_triomphe_canvas.png', category: 'Shoulder Bag', condition: 'Excellent', authentication: 'verified', status: 'Received', price: '₱98,000', payoutStatus: 'sold' },
+    { id: '1101', brand: 'Hermès', itemName: 'Kelly 28 Epsom Noir', image: 'hermes_kelly.png', category: 'Handbag', condition: 'Very Good', authentication: 'verified', primaryAuthStatus: 'verified', secondaryAuthStatus: 'verified', status: 'Available', price: '₱720,000', payoutStatus: 'notYetSold', consignorName: 'Maria Santos', consignorPhone: '0917-555-0101', serialNumber: 'HM-88912', microchipNumber: 'MC-HM-88912', postingDate: '2026-08-01', createdAtMs: nowMs - (10 * dayMs), contractDays: 60, shopifyProductId: 'gid://shopify/Product/98421049101', shopifySyncStatus: 'synced', assignedAssociate: 'Alex Rivera' },
+    { id: '1102', brand: 'Chanel', itemName: 'Chanel Boy Bag Small', image: 'chanel_boy_bag_small.png', category: 'Shoulder Bag', condition: 'Excellent', authentication: 'verified', primaryAuthStatus: 'verified', secondaryAuthStatus: 'verified', status: 'For Photography', price: '₱265,000', payoutStatus: 'notYetSold', consignorName: 'Elena Rostova', consignorPhone: '0918-555-0102', serialNumber: 'CH-44102', microchipNumber: 'MC-CH-44102', postingDate: '2026-08-20', createdAtMs: nowMs - (5 * dayMs), contractDays: 60, shopifyProductId: '', shopifySyncStatus: 'pending', assignedAssociate: 'Bea Gonzales' },
+    { id: '1103', brand: 'Louis Vuitton', itemName: 'LV OnTheGo MM', image: 'lv_onthego_mm.png', category: 'Tote', condition: 'Excellent', authentication: 'verified', primaryAuthStatus: 'verified', secondaryAuthStatus: 'verified', status: 'Available', price: '₱165,000', payoutStatus: 'notYetSold', consignorName: 'John Cruz', consignorPhone: '0919-555-0103', serialNumber: 'LV-99210', microchipNumber: 'MC-LV-99210', postingDate: '2026-07-10', createdAtMs: nowMs - (65 * dayMs), contractDays: 60, shopifyProductId: 'gid://shopify/Product/98421049103', shopifySyncStatus: 'synced', assignedAssociate: 'Carlo Mendoza' },
+    { id: '1104', brand: 'Prada', itemName: 'Prada Galleria Saffiano', image: 'prada_galleria_saffiano.png', category: 'Tote', condition: 'Excellent', authentication: 'rejected', primaryAuthStatus: 'rejected', secondaryAuthStatus: 'rejected', status: 'Return to Consignor', price: '₱110,000', payoutStatus: 'cancelled', consignorName: 'Sophia Moore', consignorPhone: '0920-555-0104', serialNumber: 'PR-10293', microchipNumber: 'MC-PR-10293', postingDate: '2026-08-15', createdAtMs: nowMs - (12 * dayMs), contractDays: 60, shopifyProductId: '', shopifySyncStatus: 'not_applicable', assignedAssociate: 'Ethan Lee' },
+    { id: '1105', brand: 'Gucci', itemName: 'Gucci Marmont Matelassé', image: 'gucci_marmont_matelasse.png', category: 'Crossbody', condition: 'Good', authentication: 'verified', primaryAuthStatus: 'verified', secondaryAuthStatus: 'verified', status: 'Sold', price: '₱92,000', payoutStatus: 'sold', consignorName: 'Angelie Reyes', consignorPhone: '0921-555-0105', serialNumber: 'GC-55102', microchipNumber: 'MC-GC-55102', postingDate: '2026-07-01', createdAtMs: nowMs - (70 * dayMs), contractDays: 60, shopifyProductId: 'gid://shopify/Product/98421049105', shopifySyncStatus: 'archived_sold', assignedAssociate: 'Denise Flores' },
+    { id: '1106', brand: 'Dior', itemName: 'Dior Saddle Bag Oblique', image: 'dior_saddle_oblique.png', category: 'Shoulder Bag', condition: 'Excellent', authentication: 'verified', primaryAuthStatus: 'verified', secondaryAuthStatus: 'verified', status: 'Available', price: '₱240,000', payoutStatus: 'notYetSold', consignorName: 'Claire Vance', consignorPhone: '0922-555-0106', serialNumber: 'DR-77812', microchipNumber: 'MC-DR-77812', postingDate: '2026-08-10', createdAtMs: nowMs - (15 * dayMs), contractDays: 60, shopifyProductId: 'gid://shopify/Product/98421049106', shopifySyncStatus: 'synced', assignedAssociate: 'Franz Garcia' },
+    { id: '1107', brand: 'Fendi', itemName: 'Fendi Baguette Medium', image: 'fendi_baguette.png', category: 'Shoulder Bag', condition: 'Good', authentication: 'pending', primaryAuthStatus: 'verified', secondaryAuthStatus: 'pending', status: 'Pending Authentication Payment', price: '₱135,000', payoutStatus: 'notYetSold', consignorName: 'Lily Tiu', consignorPhone: '0923-555-0107', serialNumber: 'FD-33201', microchipNumber: 'MC-FD-33201', postingDate: '2026-09-10', createdAtMs: nowMs - (14 * 3600 * 1000), contractDays: 60, shopifyProductId: '', shopifySyncStatus: 'pending', assignedAssociate: 'Cris Vega' },
+    { id: '1108', brand: 'Bottega Veneta', itemName: 'Bottega Jodie Small', image: 'bottega_jodie.png', category: 'Hobo', condition: 'Very Good', authentication: 'pending', primaryAuthStatus: 'pending', secondaryAuthStatus: 'pending', status: 'Pending Authentication Payment', price: '₱178,000', payoutStatus: 'notYetSold', consignorName: 'Mark Tan', consignorPhone: '0924-555-0108', serialNumber: 'BV-66192', microchipNumber: 'MC-BV-66192', postingDate: '2026-09-11', createdAtMs: nowMs - (21 * 3600 * 1000), contractDays: 60, shopifyProductId: '', shopifySyncStatus: 'pending', assignedAssociate: 'Alex Rivera' },
+    { id: '1109', brand: 'Celine', itemName: 'Celine Triomphe Canvas', image: 'celine_triomphe_canvas.png', category: 'Shoulder Bag', condition: 'Excellent', authentication: 'verified', primaryAuthStatus: 'verified', secondaryAuthStatus: 'verified', status: 'Sold', price: '₱98,000', payoutStatus: 'sold', consignorName: 'Sofia Lim', consignorPhone: '0925-555-0109', serialNumber: 'CL-88210', microchipNumber: 'MC-CL-88210', postingDate: '2026-08-05', createdAtMs: nowMs - (25 * dayMs), contractDays: 60, shopifyProductId: 'gid://shopify/Product/98421049109', shopifySyncStatus: 'archived_sold', assignedAssociate: 'Cris Vega' },
+  ];
+
+  DB.consignorClients = [
+    { id: 'con-1', name: 'Maria Santos', phone: '0917-555-0101', email: 'maria.santos@gmail.com', activeCount: 1, totalValue: '₱720,000', channel: 'Instagram', assignedAssociate: 'Alex Rivera' },
+    { id: 'con-2', name: 'Elena Rostova', phone: '0918-555-0102', email: 'elena.rostova@gmail.com', activeCount: 1, totalValue: '₱265,000', channel: 'Website', assignedAssociate: 'Bea Gonzales' },
+    { id: 'con-3', name: 'John Cruz', phone: '0919-555-0103', email: 'john.cruz@gmail.com', activeCount: 1, totalValue: '₱165,000', channel: 'Walk-in', assignedAssociate: 'Carlo Mendoza' },
+    { id: 'con-4', name: 'Angelie Reyes', phone: '0921-555-0105', email: 'angelie.reyes@gmail.com', activeCount: 1, totalValue: '₱92,000', channel: 'Tiktok', assignedAssociate: 'Denise Flores' },
+    { id: 'con-5', name: 'Claire Vance', phone: '0922-555-0106', email: 'claire.vance@gmail.com', activeCount: 1, totalValue: '₱240,000', channel: 'FB Messenger', assignedAssociate: 'Franz Garcia' },
+    { id: 'con-6', name: 'Lily Tiu', phone: '0923-555-0107', email: 'lily.tiu@vip.com', activeCount: 1, totalValue: '₱135,000', channel: 'WhatsApp', assignedAssociate: 'Cris Vega' },
+    { id: 'con-7', name: 'Mark Tan', phone: '0924-555-0108', email: 'mark.tan@gmail.com', activeCount: 1, totalValue: '₱178,000', channel: 'Instagram', assignedAssociate: 'Alex Rivera' },
+  ];
+
+  DB.consignorAssignments = [
+    { id: 'asg-1', itemId: '1101', itemName: 'Kelly 28 Epsom Noir', consignorName: 'Maria Santos', associateName: 'Alex Rivera', status: 'Completed', dateAssigned: '8/1/2026' },
+    { id: 'asg-2', itemId: '1102', itemName: 'Chanel Boy Bag Small', consignorName: 'Elena Rostova', associateName: 'Bea Gonzales', status: 'In Progress', dateAssigned: '8/20/2026' },
+    { id: 'asg-3', itemId: '1107', itemName: 'Fendi Baguette Medium', consignorName: 'Lily Tiu', associateName: 'Cris Vega', status: 'Pending', dateAssigned: '9/10/2026' },
+    { id: 'asg-4', itemId: '1108', itemName: 'Bottega Jodie Small', consignorName: 'Mark Tan', associateName: 'Alex Rivera', status: 'Pending', dateAssigned: '9/11/2026' },
   ];
 
   DB.clientInquiries = [
@@ -148,7 +158,6 @@ function nextId(prefix) {
 
 seedDatabase();
 
-// ---- Restore saved consignments from browser localStorage ----
 (function loadSavedConsignments() {
   const savedData = localStorage.getItem('consignments_data');
   if (savedData) {
@@ -163,7 +172,6 @@ seedDatabase();
   }
 })();
 
-// ---- Restore saved inventory from browser localStorage ----
 (function loadSavedInventory() {
   const savedData = localStorage.getItem('inventory_data');
   if (savedData) {

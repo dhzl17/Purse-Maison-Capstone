@@ -97,3 +97,86 @@ function showToast(message) {
   stack.appendChild(el);
   setTimeout(() => el.remove(), 3500);
 }
+
+// ---- Debounce Helper ---------------------------------------------------
+function debounce(func, wait = 300) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+// ---- SLA Countdown Badge Helper ---------------------------------------
+function renderSLABadge(createdAtMs, targetHours = 24) {
+  if (!createdAtMs) {
+    // Default to 18h SLA
+    return `<span class="sla-badge normal">⏱ 18h 30m SLA</span>`;
+  }
+  const now = Date.now();
+  const elapsedMs = now - createdAtMs;
+  const totalMs = targetHours * 3600 * 1000;
+  const remainingMs = totalMs - elapsedMs;
+
+  if (remainingMs <= 0) {
+    return `<span class="sla-badge breached">🚨 SLA Breached</span>`;
+  }
+
+  const hours = Math.floor(remainingMs / (3600 * 1000));
+  const minutes = Math.floor((remainingMs % (3600 * 1000)) / (60 * 1000));
+
+  if (hours < 4) {
+    return `<span class="sla-badge warning">⚠️ ${hours}h ${minutes}m (Urgent)</span>`;
+  }
+  return `<span class="sla-badge normal">⏱ ${hours}h ${minutes}m remaining</span>`;
+}
+
+// ---- Record Sorting Helper --------------------------------------------
+function sortRecords(records, sortBy = 'recently') {
+  const list = [...records];
+  switch (sortBy) {
+    case 'oldest':
+      return list.sort((a, b) => {
+        const da = parseDateAdded(a.dateAdded) || new Date(a.createdAt || 0);
+        const db = parseDateAdded(b.dateAdded) || new Date(b.createdAt || 0);
+        return da - db;
+      });
+    case 'price-high':
+    case 'price-desc':
+      return list.sort((a, b) => parseAmountString(b.price || b.askingPrice) - parseAmountString(a.price || a.askingPrice));
+    case 'price-low':
+    case 'price-asc':
+      return list.sort((a, b) => parseAmountString(a.price || a.askingPrice) - parseAmountString(b.price || b.askingPrice));
+    case 'alphabetical':
+    case 'a-z':
+      return list.sort((a, b) => {
+        const nameA = String(a.brand || a.itemName || a.clientName || '').toLowerCase();
+        const nameB = String(b.brand || b.itemName || b.clientName || '').toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+    case 'recently':
+    default:
+      return list.sort((a, b) => {
+        const da = parseDateAdded(a.dateAdded) || new Date(a.createdAt || 0);
+        const db = parseDateAdded(b.dateAdded) || new Date(b.createdAt || 0);
+        return db - da;
+      });
+  }
+}
+
+// ---- Render Universal Search Bar --------------------------------------
+function renderUniversalSearchBar(inputId, placeholder = 'Search by ID, Brand, Name, Serial #, Consignor...') {
+  return `
+<div class="universal-search-wrap">
+      <svg class="universal-search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="#0F2B48">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+      </svg>
+      <input type="text" id="${inputId}" class="universal-search-input" placeholder="${escapeHtml(placeholder)}" />
+    </div>
+  `;
+}
+

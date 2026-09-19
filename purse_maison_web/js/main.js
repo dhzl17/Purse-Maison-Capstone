@@ -30,7 +30,9 @@ document.addEventListener('DOMContentLoaded', () => {
   togglePasswordBtn.addEventListener('click', () => {
     const showing = passwordInput.type === 'text';
     passwordInput.type = showing ? 'password' : 'text';
-    togglePasswordBtn.textContent = showing ? 'Show' : 'Hide';
+    document.getElementById('eye-icon').style.display = showing ? '' : 'none';
+    document.getElementById('eye-off-icon').style.display = showing ? 'none' : '';
+    togglePasswordBtn.title = showing ? 'Show password' : 'Hide password';
   });
 
   // --- Quick Role Login Chips ---
@@ -51,25 +53,23 @@ document.addEventListener('DOMContentLoaded', () => {
     performLogin(usernameInput.value, passwordInput.value);
   });
 
-  function performLogin(username, password) {
+  async function performLogin(username, password) {
     loginSubmitBtn.disabled = true;
     loginSubmitBtn.textContent = 'Logging in…';
 
-    setTimeout(() => {
-      const error = Session.login(username, password);
+    const error = await Session.login(username, password);
 
-      loginSubmitBtn.disabled = false;
-      loginSubmitBtn.textContent = 'Log In';
+    loginSubmitBtn.disabled = false;
+    loginSubmitBtn.textContent = 'Log In';
 
-      if (error) {
-        loginError.textContent = error;
-        loginError.classList.remove('hidden');
-        return;
-      }
-      loginError.classList.add('hidden');
-      loginForm.reset();
-      enterApp();
-    }, 250);
+    if (error) {
+      loginError.textContent = error;
+      loginError.classList.remove('hidden');
+      return;
+    }
+    loginError.classList.add('hidden');
+    loginForm.reset();
+    enterApp();
   }
 
   // --- Forgot Password Link ---

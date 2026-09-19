@@ -93,7 +93,6 @@ const Router = {
 
     nav.innerHTML = html;
 
-    // Attach listeners
     nav.querySelectorAll('[data-toggle-parent]').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -119,7 +118,6 @@ const Router = {
     if (!Session.canAccess(route)) {
       content.innerHTML = `
         <div class="access-denied">
-          <div class="icon">🔒</div>
           <h2 style="margin-bottom:8px;">Access Restricted</h2>
           <p>Your role (${escapeHtml(Session.roleLabel())}) doesn't have access to this page module.</p>
         </div>`;

@@ -1,8 +1,26 @@
 /**
  * Session + role permissions — mirrors AppSession + UserRole from the
- * Flutter app. Since there's no backend here, "signing in" just checks
- * the plaintext mock accounts in DB.accounts directly.
+ * Flutter app. Passwords are hashed client-side using Web Crypto API
+ * (SHA-256 + per-user salt) before comparison. No plaintext passwords
+ * are stored or transmitted. When moving to a real backend, replace
+ * hashPassword() + Session.login() with an API call to POST /auth/login.
  */
+
+// ---- Password Hashing (Web Crypto API — SHA-256 + salt) ------------------
+/**
+ * Returns a SHA-256 hex digest of (salt + password).
+ * Using the browser's built-in SubtleCrypto — no external libraries needed.
+ * @param {string} salt   - per-user salt stored in DB.accounts
+ * @param {string} password - raw password entered by user
+ * @returns {Promise<string>} hex hash string
+ */
+async function hashPassword(salt, password) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(salt + password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 const ROLES = {
   superAdmin: {
@@ -24,8 +42,8 @@ const ROLES = {
     defaultRoute: 'dashboard',
     allowedRoutes: [
       'dashboard',
-      'consignment-overview', 'consignment-preintake', 'consignment-intake', 'consignment-auth', 'consignment-photo', 'consignment-design', 'consignment-pricing', 'consignment-approval',
-      'inventory', 'clients', 'forecasting', 'settings', 'help'
+      'consignment-overview', 'consignment-approval',
+      'inventory', 'settings', 'help'
     ],
     inventoryViewOnly: false,
     forecastingViewOnly: false,
@@ -143,14 +161,25 @@ const Session = {
     return roleConfig ? roleConfig.label : this.currentUser.role;
   },
 
-  /** Returns null on success, or an error message string on failure. */
-  login(username, password) {
+  /**
+   * Async login — hashes the entered password with the account's salt,
+   * then compares against the stored SHA-256 hash. No plaintext comparison.
+   * Returns null on success, or an error message string on failure.
+   * When moving to a real backend: replace this entire method with
+   * fetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) })
+   */
+  async login(username, password) {
     const match = DB.accounts.find(
       (a) => a.username.toLowerCase() === username.trim().toLowerCase(),
     );
-    if (!match || match.password !== password) {
+    if (!match) return 'Invalid username or password';
+
+    const inputHash = await hashPassword(match.salt, password);
+
+    if (inputHash !== match.passwordHash) {
       return 'Invalid username or password';
     }
+
     this.currentUser = {
       uid: match.uid,
       username: match.username,
@@ -166,7 +195,7 @@ const Session = {
     if (fullName) this.currentUser.fullName = fullName;
     if (email) this.currentUser.email = email;
     if (role && ROLES[role]) this.currentUser.role = role;
-    
+
     // Also sync back to DB.accounts
     const acc = DB.accounts.find(a => a.uid === this.currentUser.uid);
     if (acc) {
@@ -180,3 +209,4 @@ const Session = {
     this.currentUser = null;
   },
 };
+

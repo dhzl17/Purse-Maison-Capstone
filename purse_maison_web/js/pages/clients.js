@@ -4,9 +4,12 @@
  */
 
 const ClientsPage = {
+  searchKeyword: '',
+  sortBy: 'recently',
+
   inquiryStatusBadge(status) {
     const map = { newInquiry: ['New', 'info'], closed: ['Closed', 'danger'], followedUp: ['Followed-up', 'warning'], reserved: ['Reserved', 'success'] };
-    const [label, tone] = map[status];
+    const [label, tone] = map[status] || ['Unknown', 'info'];
     return badge(label, tone);
   },
   transactionResultCell(result) {
@@ -21,14 +24,41 @@ const ClientsPage = {
     return DB.clientInquiries.reduce((max, i) => Math.max(max, i.no), 0) + 1;
   },
 
+  filterAndSortInquiries(items) {
+    let list = [...items];
+    if (this.searchKeyword) {
+      const kw = this.searchKeyword.toLowerCase();
+      list = list.filter(i =>
+        String(i.clientName || '').toLowerCase().includes(kw) ||
+        String(i.clientType || '').toLowerCase().includes(kw) ||
+        String(i.clientRole || '').toLowerCase().includes(kw) ||
+        String(i.inquirySource || '').toLowerCase().includes(kw)
+      );
+    }
+    if (this.sortBy === 'alphabetical') list.sort((a, b) => (a.clientName || '').localeCompare(b.clientName || ''));
+    else if (this.sortBy === 'oldest') list.sort((a, b) => a.no - b.no);
+    else list.sort((a, b) => b.no - a.no); // recently (default)
+    return list;
+  },
+
   render() {
-    const inquiries = DB.clientInquiries;
+    const inquiries = this.filterAndSortInquiries(DB.clientInquiries);
     const associates = DB.salesAssociates;
     const activity = DB.assignmentActivity;
 
     return `
       <h1 class="page-title">Client Assignment</h1>
-      <div class="sort-row" style="margin-bottom:14px;">Sort by: <strong style="color:var(--text-dark)">Recently</strong> ▾</div>
+
+      <div class="filter-toolbar-row" style="margin-bottom:14px;">
+        <div class="filter-controls-group">
+          ${renderUniversalSearchBar('clients-search-input', 'Search by Name, Type, Source...')}
+          <select class="sort-select" id="clients-sort-select">
+            <option value="recently" ${this.sortBy === 'recently' ? 'selected' : ''}>Sort: Recently Added</option>
+            <option value="oldest" ${this.sortBy === 'oldest' ? 'selected' : ''}>Sort: Oldest First</option>
+            <option value="alphabetical" ${this.sortBy === 'alphabetical' ? 'selected' : ''}>Sort: Name A-Z</option>
+          </select>
+        </div>
+      </div>
 
       <div class="section-grid">
         <div class="chart-card col-wide">
@@ -40,7 +70,8 @@ const ClientsPage = {
             <table class="data-table">
               <thead><tr><th>No.</th><th>Client Name</th><th>Type</th><th>Role</th><th>Status</th><th>Source</th><th>Result</th><th>Actions</th></tr></thead>
               <tbody>
-                ${inquiries.map((i) => `
+                ${inquiries.length === 0 ? `<tr><td colspan="8" class="cell-center cell-muted" style="padding:18px;">No inquiries match your search.</td></tr>` :
+                  inquiries.map((i) => `
                   <tr>
                     <td>${i.no}</td>
                     <td class="cell-bold">${escapeHtml(i.clientName)}</td>
@@ -103,6 +134,27 @@ const ClientsPage = {
   },
 
   afterRender() {
+    // -- Search bar (300ms debounce) --
+    const searchInput = document.getElementById('clients-search-input');
+    if (searchInput) {
+      searchInput.value = this.searchKeyword;
+      searchInput.addEventListener('input', debounce((e) => {
+        this.searchKeyword = e.target.value;
+        Router.rerender();
+        const newInput = document.getElementById('clients-search-input');
+        if (newInput) { newInput.focus(); newInput.setSelectionRange(newInput.value.length, newInput.value.length); }
+      }, 300));
+    }
+
+    // -- Sort select --
+    const sortSelect = document.getElementById('clients-sort-select');
+    if (sortSelect) {
+      sortSelect.addEventListener('change', (e) => {
+        this.sortBy = e.target.value;
+        Router.rerender();
+      });
+    }
+
     document.getElementById('btn-add-inquiry').addEventListener('click', () => this.openInquiryForm(null));
     document.getElementById('btn-add-associate').addEventListener('click', () => this.openAssociateForm(null));
     document.getElementById('btn-quick-walkin').addEventListener('click', () => this.openInquiryForm(null, 'Walk-in'));
@@ -135,6 +187,7 @@ const ClientsPage = {
       });
     });
   },
+
 
   openInquiryForm(existing, initialClientType) {
     const isEdit = !!existing;
