@@ -1,19 +1,22 @@
-name: Sales forecast
+name: Scheduled jobs
 
 on:
   schedule:
     - cron: "0 18 * * *"   # nightly full forecast at 2:00 AM Philippine time
-    - cron: "15 * * * *"   # hourly check for a queued "Regenerate Forecast" request
+    - cron: "15 * * * *"   # hourly: queued forecast requests and consignor emails
   workflow_dispatch:        # adds a "Run workflow" button on GitHub
 
 concurrency:
-  group: sales-forecast
+  group: scheduled-jobs
   cancel-in-progress: false
 
 jobs:
-  forecast:
+  run:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -21,18 +24,24 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: services/forecasting/requirements.txt
+          cache-dependency-path: services/**/requirements.txt
 
       - name: Install libraries
-        run: pip install -r services/forecasting/requirements.txt
+        run: |
+          pip install -r services/forecasting/requirements.txt
+          pip install -r services/notifications/requirements.txt
 
       - name: Run forecast
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         run: |
           if [ "${{ github.event.schedule }}" = "15 * * * *" ]; then
             python services/forecasting/forecast.py --queued-only
           else
             python services/forecasting/forecast.py
           fi
+
+      - name: Send consignor emails
+        if: ${{ !cancelled() }}
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        run: python services/notifications/send_notifications.py
