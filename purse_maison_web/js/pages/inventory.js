@@ -73,7 +73,9 @@ const InventoryPage = {
   },
 
   render() {
-    const viewOnly = Session.inventoryViewOnly();
+    // Inventory is now a live view of the consignment pipeline (loaded by js/store.js).
+    // Items are added and edited through Consignment Management, not here.
+    const viewOnly = true;
     const allItems = DB.inventory;
     const processed = this.filterAndSortItems(allItems);
     const totalPages = Math.max(1, Math.ceil(processed.length / this.pageSize));
@@ -89,6 +91,7 @@ const InventoryPage = {
 
     return `
       <h1 class="page-title">Inventory Management</h1>
+      <p class="cell-muted" style="margin:-6px 0 16px;font-size:12.5px;">Items appear here once they are published, and stay until sold or returned to the consignor.</p>
 
       <div class="stat-grid">
         <div class="stat-card"><div class="stat-title">Total Items</div><div class="stat-value-row"><span class="stat-value">${total}</span></div></div>
@@ -196,6 +199,7 @@ const InventoryPage = {
 
   afterRender() {
     const items = DB.inventory;
+    DataStore.refreshIfStale();
 
     //Search bar
     const searchInput = document.getElementById('inventory-search-input');

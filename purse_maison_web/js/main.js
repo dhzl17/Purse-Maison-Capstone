@@ -137,11 +137,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (Session.isLoggedIn()) Router.rerender();
   });
 
-  function enterApp() {
+  async function enterApp() {
     landingView.classList.add('hidden');
     loginView.classList.add('hidden');
     appView.classList.remove('hidden');
-    
+    document.getElementById('page-content').innerHTML = '<p class="cell-muted" style="padding:24px;">Loading your data…</p>';
+
+    await DataStore.loadAll();
+
     const targetRoute = Session.defaultRoute();
     Router.navigate(targetRoute);
     showToast(`Welcome back, ${Session.currentUser.fullName || Session.currentUser.username}!`);
