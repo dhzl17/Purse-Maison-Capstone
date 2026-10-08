@@ -1,25 +1,11 @@
 /**
- * Session + role permissions — mirrors AppSession + UserRole from the
- * Flutter app. Passwords are hashed client-side using Web Crypto API
- * (SHA-256 + per-user salt) before comparison. No plaintext passwords
- * are stored or transmitted. When moving to a real backend, replace
- * hashPassword() + Session.login() with an API call to POST /auth/login.
+ * Session + role permissions.
+ * Login goes through Supabase Auth (see js/supabase.js). Staff type a username;
+ * it is converted to username@<STAFF_EMAIL_DOMAIN> for Supabase. The role and
+ * active flag come from the database `profiles` table, never from the browser.
+ * Note: the ROLES table below only controls which pages and buttons are shown.
+ * The real security is Row Level Security in the database.
  */
-
-/**
- * Returns a SHA-256 hex digest of (salt + password).
- * Using the browser's built-in SubtleCrypto — no external libraries needed.
- * @param {string} salt   - per-user salt stored in DB.accounts
- * @param {string} password - raw password entered by user
- * @returns {Promise<string>} hex hash string
- */
-async function hashPassword(salt, password) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(salt + password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
 
 const ROLES = {
   superAdmin: {
@@ -166,32 +152,49 @@ const Session = {
   },
 
   /**
-   * Async login — hashes the entered password with the account's salt,
-   * then compares against the stored SHA-256 hash. No plaintext comparison.
+   * Logs in through Supabase Auth, then loads the staff profile (role, name).
    * Returns null on success, or an error message string on failure.
-   * When moving to a real backend: replace this entire method with
-   * fetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) })
    */
   async login(username, password) {
-    const match = DB.accounts.find(
-      (a) => a.username.toLowerCase() === username.trim().toLowerCase(),
-    );
-    if (!match) return 'Invalid username or password';
+    try {
+      const { data, error } = await sbClient.auth.signInWithPassword({
+        email: usernameToEmail(username),
+        password,
+      });
+      if (error || !data || !data.user) return 'Invalid username or password';
 
-    const inputHash = await hashPassword(match.salt, password);
-
-    if (inputHash !== match.passwordHash) {
-      return 'Invalid username or password';
+      const profile = await loadCurrentStaffProfile(data.user);
+      if (!profile) {
+        await sbClient.auth.signOut();
+        return 'This account does not have active staff access.';
+      }
+      this.currentUser = profile;
+      return null;
+    } catch (err) {
+      console.error('Login failed:', err);
+      return 'Could not reach the server. Check your connection and try again.';
     }
+  },
 
-    this.currentUser = {
-      uid: match.uid,
-      username: match.username,
-      email: match.email || `${match.username}@pursemaison.com`,
-      fullName: match.fullName || match.username,
-      role: match.role,
-    };
-    return null;
+  /**
+   * Restores a saved Supabase session after a page refresh.
+   * Returns true when a valid staff session was found.
+   */
+  async restore() {
+    try {
+      const { data } = await sbClient.auth.getSession();
+      if (!data || !data.session) return false;
+      const profile = await loadCurrentStaffProfile(data.session.user);
+      if (!profile) {
+        await sbClient.auth.signOut();
+        return false;
+      }
+      this.currentUser = profile;
+      return true;
+    } catch (err) {
+      console.error('Could not restore session:', err);
+      return false;
+    }
   },
 
   updateProfile({ fullName, email, role }) {
@@ -208,8 +211,9 @@ const Session = {
     }
   },
 
-  logout() {
+  async logout() {
     this.currentUser = null;
+    try { await sbClient.auth.signOut(); } catch (err) { console.error('Sign-out failed:', err); }
   },
 };
 

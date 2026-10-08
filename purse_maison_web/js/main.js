@@ -33,17 +33,6 @@ document.addEventListener('DOMContentLoaded', () => {
     togglePasswordBtn.title = showing ? 'Show password' : 'Hide password';
   });
 
-  document.querySelectorAll('.role-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const user = chip.dataset.user;
-      const pass = chip.dataset.pass;
-      usernameInput.value = user;
-      passwordInput.value = pass;
-      
-      performLogin(user, pass);
-    });
-  });
-
   loginForm.addEventListener('submit', (e) => {
     e.preventDefault();
     performLogin(usernameInput.value, passwordInput.value);
@@ -157,4 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
     Router.navigate(targetRoute);
     showToast(`Welcome back, ${Session.currentUser.fullName || Session.currentUser.username}!`);
   }
+
+  // Keep staff signed in across page refreshes (Supabase saves the session)
+  Session.restore().then((restored) => { if (restored) enterApp(); });
 });

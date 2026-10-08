@@ -89,19 +89,6 @@
       <button type="submit" class="btn-primary" id="login-submit-btn">Log In</button>
     </form>
 
-    <div class="login-rbac-section">
-      <div class="rbac-section-title">Quick Demo Login (Select Role)</div>
-      <div class="role-chips-grid">
-        <button type="button" class="role-chip" data-user="superadmin" data-pass="admin123" title="Full System Owner">Admin</button>
-        <button type="button" class="role-chip" data-user="manager" data-pass="manager123" title="Approvals & Analytics">Manager</button>
-        <button type="button" class="role-chip" data-user="consignment" data-pass="consignment123" title="Item Intake">Consignment</button>
-        <button type="button" class="role-chip" data-user="authenticator" data-pass="auth123" title="Authentication">Authenticator</button>
-        <button type="button" class="role-chip" data-user="photographer" data-pass="photo123" title="Photo Assets">Photographer</button>
-        <button type="button" class="role-chip" data-user="designer" data-pass="design123" title="Listing Creation">Designer</button>
-        <button type="button" class="role-chip" data-user="pricing" data-pass="price123" title="Pricing & Markup">Pricing Team</button>
-        <button type="button" class="role-chip" data-user="salesassociate" data-pass="sales123" title="Client Assignment">Sales</button>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -131,6 +118,9 @@
 <div id="modal-root"></div>
 <div id="toast-stack"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/supabase.js"></script>
 <script src="js/data.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/ui.js"></script>
