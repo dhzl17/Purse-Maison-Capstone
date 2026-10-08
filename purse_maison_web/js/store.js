@@ -253,16 +253,12 @@ const DataStore = {
       };
     }).sort((a, b) => a.associateName.localeCompare(b.associateName));
 
-    // Activity feed: consignment assignments (logged by the database) + inquiry assignments
-    const feed = [];
-    if (!activity.error) for (const a of activity.data) feed.push({ description: a.description, at: a.created_at });
-    for (const i of DB.clientInquiries) {
-      if (i.assignedId && i.assignedAt) {
-        feed.push({ description: `Inquiry from "${i.clientName}" assigned to Associate "${i.assignedName}"`, at: i.assignedAt });
-      }
-    }
-    feed.sort((a, b) => new Date(b.at) - new Date(a.at));
-    DB.assignmentActivity = feed.slice(0, 12).map((f, i) => ({ id: `aa-${i}`, description: f.description, timestamp: this.formatDateTime(f.at) }));
+    // Activity feed: written by database triggers (inquiry assignments, resolutions, consignment assignments)
+    DB.assignmentActivity = activity.error ? [] : activity.data.slice(0, 12).map((a, i) => ({
+      id: `aa-${i}`,
+      description: a.description,
+      timestamp: this.formatDateTime(a.created_at),
+    }));
   },
 
   // ---------------------------------------------------------------- forecast
