@@ -273,10 +273,11 @@ const DataStore = {
         .select(`id, item_code, brand, model, color, category, hardware, serial_number, microchip_number, date_code,
                  condition_notes, accessories_included, price, consignor_payout, current_stage, lead_status,
                  inquiry_channel, inquiry_notes, asking_price, agreed_payout, fulfillment_method, appointment_at,
-                 agreement_id, created_at, updated_at,
+                 agreement_id, assigned_photographer_id, photos_approved, created_at, updated_at,
                  consignor:consignors(id, full_name, phone, email, id_verified, id_type, id_photo_path, verified_at),
                  agreement:consignment_agreements(signed_at),
                  item_photos(photo_type, storage_path, uploaded_at),
+                 listing_photos(id, photo_type, storage_path, is_primary, edited, uploaded_at),
                  price_negotiations(asking_price, counter_offer, notes, logged_at),
                  authentication_records(id, provider, category, fee, payment_status, payment_reference, payment_confirmed_at,
                    service_started_at, sla_deadline, primary_authenticator_id, secondary_authenticator_id,
@@ -298,6 +299,9 @@ const DataStore = {
       const photos = (r.item_photos || []).slice().sort((a, b) => new Date(a.uploaded_at) - new Date(b.uploaded_at));
       const latestPhoto = {};
       for (const p of photos) latestPhoto[p.photo_type] = p.storage_path; // newest wins
+      const lphotos = (r.listing_photos || []).slice().sort((a, b) => new Date(a.uploaded_at) - new Date(b.uploaded_at));
+      const latestListing = {};
+      for (const p of lphotos) latestListing[p.photo_type] = p; // newest wins
       const listing = this.one(r.listings);
       return {
         id: r.id,
@@ -328,6 +332,10 @@ const DataStore = {
         updatedAt: r.updated_at,
         consignor: this.one(r.consignor) || { full_name: '(unknown)' },
         photos: latestPhoto,
+        listingPhotos: latestListing,
+        listingPhotoList: lphotos,
+        photographerId: r.assigned_photographer_id,
+        photosApproved: !!r.photos_approved,
         negotiations: (r.price_negotiations || []).slice().sort((a, b) => new Date(b.logged_at) - new Date(a.logged_at)),
         auth: this.one(r.authentication_records) || null,
         listingStatus: listing ? listing.inventory_status : null,
