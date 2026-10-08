@@ -17,6 +17,7 @@
  *   DB.consignorList        consignors, for lookup and duplicate checks
  *   DB.authFeeSchedule      authentication fee schedule
  *   DB.staffDirectory       staff names and roles (for authenticator assignment)
+ *   DB.markupTiers          markup tier schedule (pricing preview; the database does the real calculation)
  *   DB.salesForecasts       one row per brand from the latest ARIMA forecast
  *   DB.forecastRows         the monthly forecast values behind those rows
  *   DB.forecastMeta         when it ran, model accuracy, latest run status, skipped brands
@@ -268,7 +269,7 @@ const DataStore = {
 
   // ------------------------------------------------------------- pipeline
   async loadPipeline() {
-    const [items, consignors, fees, staff] = await Promise.all([
+    const [items, consignors, fees, staff, tiers] = await Promise.all([
       sbClient.from('consignment_items')
         .select(`id, item_code, brand, model, color, category, hardware, serial_number, microchip_number, date_code,
                  condition_notes, accessories_included, price, consignor_payout, current_stage, lead_status,
@@ -291,12 +292,14 @@ const DataStore = {
       sbClient.from('consignors').select('id, full_name, phone, email').order('full_name').limit(1000),
       sbClient.from('authentication_fee_schedule').select('provider, category, fee').order('provider'),
       sbClient.from('profiles').select('id, full_name, role, is_active').limit(500),
+      sbClient.from('markup_tier_schedule').select('threshold_price, comparison, category_restriction, markup_type, markup_value'),
     ]);
     if (items.error) { DB.pipelineItems = []; throw items.error; }
 
     DB.consignorList = consignors.error ? [] : consignors.data;
     DB.authFeeSchedule = fees.error ? [] : fees.data;
     DB.staffDirectory = staff.error ? [] : staff.data;
+    DB.markupTiers = tiers.error ? [] : tiers.data.map((t) => ({ ...t, threshold_price: Number(t.threshold_price), markup_value: Number(t.markup_value) }));
 
     DB.pipelineItems = items.data.map((r) => {
       const photos = (r.item_photos || []).slice().sort((a, b) => new Date(a.uploaded_at) - new Date(b.uploaded_at));
