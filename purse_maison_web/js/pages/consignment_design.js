@@ -91,8 +91,7 @@ Object.assign(ConsignmentFlow, {
           ${this.queueTable(editing, this.selectedDesignItem, [
             ['Item ID', (i) => `<strong>${escapeHtml(i.code)}</strong>`],
             ['Item', (i) => `<div style="font-weight:600;">${escapeHtml(this.itemName(i))}</div>${i.managerReviews[0] && i.managerReviews[0].return_reason === 'photos' ? badge('Returned by manager', 'danger') : ''}`],
-            ['Checklist', (i) => `${i.photoChecklist.length}/5`],
-            ['Cover', (i) => (this.coverPhoto(i) ? badge('Chosen', 'success') : '<span class="cell-muted">—</span>')],
+            ['Progress', (i) => `<div style="font-size:12px;">Checklist ${i.photoChecklist.length}/5</div>${this.coverPhoto(i) ? badge('Cover chosen', 'success') : '<span class="cell-muted" style="font-size:12px;">No cover</span>'}`],
           ], 'No photos waiting for editing.')}
         </div>
         <div class="card col-narrow">

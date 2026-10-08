@@ -664,10 +664,15 @@ const ConsignmentFlow = {
           ['Consignor & Item', (i) => `<div style="font-weight:600;">${escapeHtml(i.consignor.full_name)}</div><div class="cell-muted" style="font-size:11.5px;">${escapeHtml(this.itemName(i))}</div>`],
           ['Arrival', (i) => `${escapeHtml(FULFILLMENT_METHODS[i.fulfillment] || '—')}<div class="cell-muted" style="font-size:11.5px;">${escapeHtml(this.fmtDate(i.appointmentAt))}</div>`],
           ['Agreed Payout', (i) => this.peso(i.agreedPayout)],
-          ['Stage', (i) => this.stageBadge(i.stage)],
+          ['Stage', (i) => this.stageBadge(i.stage) + (this.isDetailsRevision(i) ? `<div>${badge('Details revision', 'danger')}</div>` : '')],
         ], 'No items waiting to be received. Items appear here once marked In Transit on Inquiries & Pre-Intake.')}
       </div>
       ${sel ? this.renderIntakePanel(sel, editable) : ''}`;
+  },
+
+  /** Returned by the manager for item-details corrections (already authenticated, sitting at Receiving). */
+  isDetailsRevision(i) {
+    return i.stage === 'arrivals_receiving' && !!(i.auth && i.auth.final_result);
   },
 
   receivingChecks(i) {
@@ -686,13 +691,18 @@ const ConsignmentFlow = {
     const atDoor = i.stage === 'dropoff_pickup_courier';
     const checks = this.receivingChecks(i);
     const ready = checks.every(([ok]) => ok);
-    const lockDetails = !atDoor; // the database re-checks receiving rules on every change once received
+    const revision = this.isDetailsRevision(i);
+    const lockDetails = !atDoor && !revision; // after receiving, details only reopen for a manager's revision request
+    const review = revision ? (i.managerReviews || [])[0] : null;
 
     return `
       <div class="section-grid" style="align-items:flex-start;">
         <div class="card col-wide">
           <div class="card-title" style="margin-bottom:6px;">${escapeHtml(i.code)} · ${escapeHtml(this.itemName(i))}</div>
           <div style="margin-bottom:14px;">${this.stageBadge(i.stage)}</div>
+          ${revision ? `<div style="background:#FEF2F2; border:1px solid #FCA5A5; border-radius:8px; padding:10px; font-size:12.5px; margin-bottom:14px;">
+            <strong style="color:var(--danger-red);">The manager asked for item details to be corrected</strong>${review && review.notes ? `: ${escapeHtml(review.notes)}` : '.'}
+            Fix the details below, save, then send it back to the manager.</div>` : ''}
 
           <h3 style="font-size:14px; margin:0 0 8px;">1. Consignor Identity</h3>
           <div style="font-size:12.5px; margin-bottom:8px;">${escapeHtml(c.full_name)}${c.phone ? ` · ${escapeHtml(c.phone)}` : ''}${c.email ? ` · ${escapeHtml(c.email)}` : ''}</div>
@@ -748,7 +758,7 @@ const ConsignmentFlow = {
           </form>
 
           <h3 style="font-size:14px; margin:18px 0 8px;">3. Required Photos</h3>
-          ${this.renderPhotoGrid(i, editable && !lockDetails)}
+          ${this.renderPhotoGrid(i, editable && atDoor)}
 
           <h3 style="font-size:14px; margin:18px 0 8px;">4. Consignment Agreement & E-Signature</h3>
           ${i.agreementId ? `<div style="font-size:12.5px; color:var(--green);">✓ Signed on ${escapeHtml(this.fmtDate(i.agreementSignedAt))}</div>` : `
@@ -772,8 +782,12 @@ const ConsignmentFlow = {
           ${atDoor && !ready ? '<small class="cell-muted">Receive Item unlocks when every line above is ticked.</small>' : ''}
           ${!atDoor ? '<div style="font-size:12.5px; color:var(--green); margin-top:8px;">✓ Received</div>' : ''}
 
+          ${revision ? `
+          <div class="card-title" style="margin:20px 0 10px;">Details Revision</div>
+          <div style="font-size:12.5px; margin-bottom:8px;">Authentication: ${this.authCell(i)} · photos already approved.</div>
+          ${editable ? '<button class="btn-confirm" id="int-revision-done" style="width:100%;">Send Back to Manager</button><small class="cell-muted">Save the corrected details first.</small>' : ''}` : `
           <div class="card-title" style="margin:20px 0 10px;">6. Authentication Payment</div>
-          ${this.renderPaymentSection(i, editable)}
+          ${this.renderPaymentSection(i, editable)}`}
           <button class="btn-secondary" id="int-history" style="width:100%; margin-top:16px;">View Activity Log</button>
         </div>
       </div>`;
@@ -884,6 +898,10 @@ const ConsignmentFlow = {
         if (error) throw error;
         await this.updateItem(i.id, { agreement_id: data.id });
       });
+    });
+
+    on('int-revision-done', (btn) => {
+      this.save(btn, `${i.code} sent back to the manager for approval.`, () => this.updateItem(i.id, { current_stage: 'manager_approval' }));
     });
 
     on('int-receive', (btn) => {
