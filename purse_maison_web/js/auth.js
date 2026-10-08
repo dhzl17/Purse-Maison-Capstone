@@ -198,18 +198,10 @@ const Session = {
     }
   },
 
-  updateProfile({ fullName, email, role }) {
+  /** Updates the in-memory copy after Settings saves the name to the database (update_my_profile). */
+  updateProfile({ fullName }) {
     if (!this.currentUser) return;
     if (fullName) this.currentUser.fullName = fullName;
-    if (email) this.currentUser.email = email;
-    if (role && ROLES[role]) this.currentUser.role = role;
-
-    const acc = DB.accounts.find(a => a.uid === this.currentUser.uid);
-    if (acc) {
-      acc.fullName = this.currentUser.fullName;
-      acc.email = this.currentUser.email;
-      acc.role = this.currentUser.role;
-    }
   },
 
   async logout() {

@@ -58,25 +58,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   document.getElementById('login-forgot-btn')?.addEventListener('click', () => {
-    openModal({
-      title: 'Reset Password',
+    const overlay = openModal({
+      title: 'Forgot Password',
       bodyHtml: `
-        <p>Please enter your registered work email to receive password reset instructions.</p>
-        <div class="field-group" style="margin-top:16px;">
-          <label class="field-label">Work Email</label>
-          <input class="field-input" type="email" placeholder="user@pursemaison.com" id="reset-email-input" />
-        </div>
+        <p>Staff passwords are reset by the owner.</p>
+        <p style="margin-top:10px;">Ask the owner (Super Admin) to open <strong>Settings → Team Accounts</strong> and click
+        <strong>Reset Password</strong> next to your name. They will give you a temporary password, which you can
+        change in Settings after logging in.</p>
         <div class="modal-actions">
-          <button class="btn-secondary" data-close-modal>Cancel</button>
-          <button class="btn-confirm" id="btn-send-reset">Send Reset Link</button>
+          <button class="btn-confirm" data-close-modal>OK</button>
         </div>
       `
     });
-    document.querySelector('[data-close-modal]')?.addEventListener('click', closeModal);
-    document.getElementById('btn-send-reset')?.addEventListener('click', () => {
-      closeModal();
-      showToast('Password reset link sent to your email.');
-    });
+    overlay.querySelectorAll('[data-close-modal]').forEach((b) => b.addEventListener('click', closeModal));
   });
 
   document.getElementById('logout-btn').addEventListener('click', () => {
@@ -103,12 +97,11 @@ document.addEventListener('DOMContentLoaded', () => {
     overlay.innerHTML = modalHtml;
     document.getElementById('modal-root').appendChild(overlay);
 
-    overlay.querySelector('#confirm-logout-btn').addEventListener('click', () => {
+    overlay.querySelector('#confirm-logout-btn').addEventListener('click', async () => {
       overlay.remove();
-      Session.logout();
-      appView.classList.add('hidden');
-      loginView.classList.remove('hidden');
-      showToast('Logged out successfully.');
+      await Session.logout();
+      // Reload so nothing from this account stays in memory on a shared computer
+      window.location.reload();
     });
 
     overlay.querySelector('#cancel-logout-btn').addEventListener('click', () => {
