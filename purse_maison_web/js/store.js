@@ -16,6 +16,7 @@
  *   DB.pipelineItems        every consignment item with its consignor, photos and negotiation log
  *   DB.consignorList        consignors, for lookup and duplicate checks
  *   DB.authFeeSchedule      authentication fee schedule
+ *   DB.staffDirectory       staff names and roles (for authenticator assignment)
  *   DB.salesForecasts       one row per brand from the latest ARIMA forecast
  *   DB.forecastRows         the monthly forecast values behind those rows
  *   DB.forecastMeta         when it ran, model accuracy, latest run status, skipped brands
@@ -267,7 +268,7 @@ const DataStore = {
 
   // ------------------------------------------------------------- pipeline
   async loadPipeline() {
-    const [items, consignors, fees] = await Promise.all([
+    const [items, consignors, fees, staff] = await Promise.all([
       sbClient.from('consignment_items')
         .select(`id, item_code, brand, model, color, category, hardware, serial_number, microchip_number, date_code,
                  condition_notes, accessories_included, price, consignor_payout, current_stage, lead_status,
@@ -277,17 +278,21 @@ const DataStore = {
                  agreement:consignment_agreements(signed_at),
                  item_photos(photo_type, storage_path, uploaded_at),
                  price_negotiations(asking_price, counter_offer, notes, logged_at),
-                 authentication_records(provider, category, fee, payment_status, payment_reference, final_result),
+                 authentication_records(id, provider, category, fee, payment_status, payment_reference, payment_confirmed_at,
+                   service_started_at, sla_deadline, primary_authenticator_id, secondary_authenticator_id,
+                   primary_result, secondary_result, final_result, certificate_url, certificate_uploaded_at),
                  listings(inventory_status)`)
         .order('created_at', { ascending: false })
         .limit(1000),
       sbClient.from('consignors').select('id, full_name, phone, email').order('full_name').limit(1000),
       sbClient.from('authentication_fee_schedule').select('provider, category, fee').order('provider'),
+      sbClient.from('profiles').select('id, full_name, role, is_active').limit(500),
     ]);
     if (items.error) { DB.pipelineItems = []; throw items.error; }
 
     DB.consignorList = consignors.error ? [] : consignors.data;
     DB.authFeeSchedule = fees.error ? [] : fees.data;
+    DB.staffDirectory = staff.error ? [] : staff.data;
 
     DB.pipelineItems = items.data.map((r) => {
       const photos = (r.item_photos || []).slice().sort((a, b) => new Date(a.uploaded_at) - new Date(b.uploaded_at));

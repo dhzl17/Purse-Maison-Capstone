@@ -71,8 +71,15 @@ const ConsignmentFlow = {
   overviewStage: 'all',
   photoUrls: {},
 
+  /** route -> [render method, bind method]. Other files add their pages here (e.g. consignment_auth.js). */
+  pages: {
+    'consignment-overview': ['renderOverview', 'bindOverview'],
+    'consignment-preintake': ['renderPreIntake', 'bindPreIntake'],
+    'consignment-intake': ['renderIntake', 'bindIntake'],
+  },
+
   handles(route) {
-    return !route || ['consignment', 'consignment-overview', 'consignment-preintake', 'consignment-intake'].includes(route);
+    return !route || route === 'consignment' || !!this.pages[route];
   },
 
   canEdit() {
@@ -81,16 +88,14 @@ const ConsignmentFlow = {
   },
 
   render(route) {
-    if (route === 'consignment-preintake') return this.renderPreIntake();
-    if (route === 'consignment-intake') return this.renderIntake();
-    return this.renderOverview();
+    const [renderFn] = this.pages[route] || this.pages['consignment-overview'];
+    return this[renderFn]();
   },
 
   afterRender(route) {
     DataStore.refreshIfStale();
-    if (route === 'consignment-preintake') return this.bindPreIntake();
-    if (route === 'consignment-intake') return this.bindIntake();
-    return this.bindOverview();
+    const [, bindFn] = this.pages[route] || this.pages['consignment-overview'];
+    return this[bindFn]();
   },
 
   // ================================================================ helpers
