@@ -13,6 +13,9 @@
  *   DB.clientInquiries      client inquiries (Client Assignment page)
  *   DB.salesAssociates      sales associates with their current workload
  *   DB.assignmentActivity   recent assignment activity feed
+ *   DB.pipelineItems        every consignment item with its consignor, photos and negotiation log
+ *   DB.consignorList        consignors, for lookup and duplicate checks
+ *   DB.authFeeSchedule      authentication fee schedule
  *   DB.salesForecasts       one row per brand from the latest ARIMA forecast
  *   DB.forecastRows         the monthly forecast values behind those rows
  *   DB.forecastMeta         when it ran, model accuracy, latest run status, skipped brands
@@ -45,6 +48,7 @@ const DataStore = {
         this._run('items', () => this.loadItems()),
         this._run('sales history', () => this.loadSalesSeries()),
         this._run('clients', () => this.loadClients()),
+        this._run('consignments', () => this.loadPipeline()),
       ]);
       // The forecast summary compares against sales history, so it loads after it.
       await this._run('forecast', () => this.loadForecast());
@@ -259,6 +263,71 @@ const DataStore = {
       description: a.description,
       timestamp: this.formatDateTime(a.created_at),
     }));
+  },
+
+  // ------------------------------------------------------------- pipeline
+  async loadPipeline() {
+    const [items, consignors, fees] = await Promise.all([
+      sbClient.from('consignment_items')
+        .select(`id, item_code, brand, model, color, category, hardware, serial_number, microchip_number, date_code,
+                 condition_notes, accessories_included, price, consignor_payout, current_stage, lead_status,
+                 inquiry_channel, inquiry_notes, asking_price, agreed_payout, fulfillment_method, appointment_at,
+                 agreement_id, created_at, updated_at,
+                 consignor:consignors(id, full_name, phone, email, id_verified, id_type, id_photo_path, verified_at),
+                 agreement:consignment_agreements(signed_at),
+                 item_photos(photo_type, storage_path, uploaded_at),
+                 price_negotiations(asking_price, counter_offer, notes, logged_at),
+                 authentication_records(provider, category, fee, payment_status, payment_reference, final_result),
+                 listings(inventory_status)`)
+        .order('created_at', { ascending: false })
+        .limit(1000),
+      sbClient.from('consignors').select('id, full_name, phone, email').order('full_name').limit(1000),
+      sbClient.from('authentication_fee_schedule').select('provider, category, fee').order('provider'),
+    ]);
+    if (items.error) { DB.pipelineItems = []; throw items.error; }
+
+    DB.consignorList = consignors.error ? [] : consignors.data;
+    DB.authFeeSchedule = fees.error ? [] : fees.data;
+
+    DB.pipelineItems = items.data.map((r) => {
+      const photos = (r.item_photos || []).slice().sort((a, b) => new Date(a.uploaded_at) - new Date(b.uploaded_at));
+      const latestPhoto = {};
+      for (const p of photos) latestPhoto[p.photo_type] = p.storage_path; // newest wins
+      const listing = this.one(r.listings);
+      return {
+        id: r.id,
+        code: r.item_code,
+        brand: r.brand,
+        model: r.model || '',
+        color: r.color || '',
+        category: r.category || '',
+        hardware: r.hardware || '',
+        serial: r.serial_number || '',
+        microchip: r.microchip_number || '',
+        dateCode: r.date_code || '',
+        conditionNotes: r.condition_notes || '',
+        accessories: r.accessories_included ? r.accessories_included.split(',').map((a) => a.trim()).filter(Boolean) : [],
+        price: r.price == null ? null : Number(r.price),
+        consignorPayout: r.consignor_payout == null ? null : Number(r.consignor_payout),
+        stage: r.current_stage,
+        leadStatus: r.lead_status,
+        channel: r.inquiry_channel || '',
+        notes: r.inquiry_notes || '',
+        askingPrice: r.asking_price == null ? null : Number(r.asking_price),
+        agreedPayout: r.agreed_payout == null ? null : Number(r.agreed_payout),
+        fulfillment: r.fulfillment_method || '',
+        appointmentAt: r.appointment_at,
+        agreementId: r.agreement_id,
+        agreementSignedAt: (this.one(r.agreement) || {}).signed_at || null,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+        consignor: this.one(r.consignor) || { full_name: '(unknown)' },
+        photos: latestPhoto,
+        negotiations: (r.price_negotiations || []).slice().sort((a, b) => new Date(b.logged_at) - new Date(a.logged_at)),
+        auth: this.one(r.authentication_records) || null,
+        listingStatus: listing ? listing.inventory_status : null,
+      };
+    });
   },
 
   // ---------------------------------------------------------------- forecast
