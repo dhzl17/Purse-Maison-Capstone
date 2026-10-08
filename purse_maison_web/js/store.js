@@ -285,7 +285,13 @@ const DataStore = {
                    service_started_at, sla_deadline, primary_authenticator_id, secondary_authenticator_id,
                    primary_result, secondary_result, final_result, certificate_url, certificate_uploaded_at),
                  listings(id, title, description, specifications, seo_title, seo_description, authenticity_footer,
-                          layaway_clause, sales_channels, inventory_status, published_at, submitted_at),
+                          layaway_clause, sales_channels, inventory_status, published_at, submitted_at, contract_days),
+                 sales_transactions(id, buyer_name, buyer_phone, sale_type, layaway_months, sale_price, commission,
+                          consignor_payout, layaway_interest, total_due, payment_status, payment_verified_at,
+                          payout_status, payout_due_by, payout_released_at, sold_at, sales_associate_id,
+                          layaway_payments(amount, paid_at)),
+                 item_withdrawals(id, reason, days_since_posting, pull_out_fee, fee_paid, fee_paid_at, status, requested_at, released_at),
+                 contract_extensions(extra_days, notes, created_at),
                  manager_reviews(decision, return_reason, notes, reviewed_at)`)
         .order('created_at', { ascending: false })
         .limit(1000),
@@ -351,6 +357,9 @@ const DataStore = {
         markup: r.markup == null ? null : Number(r.markup),
         priceApproved: !!r.price_approved,
         payoutConfirmed: !!r.payout_confirmed,
+        sale: this.one(r.sales_transactions) || null,
+        withdrawal: this.one(r.item_withdrawals) || null,
+        extensions: r.contract_extensions || [],
         managerReviews: (r.manager_reviews || []).slice().sort((a, b) => new Date(b.reviewed_at) - new Date(a.reviewed_at)),
       };
     });

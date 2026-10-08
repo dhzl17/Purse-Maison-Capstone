@@ -15,7 +15,7 @@ const ROLES = {
     allowedRoutes: [
       'dashboard',
       'consignment-overview', 'consignment-preintake', 'consignment-intake', 'consignment-auth', 'consignment-photo', 'consignment-design', 'consignment-pricing', 'consignment-approval',
-      'inventory', 'clients', 'forecasting', 'settings', 'help'
+      'inventory', 'clients', 'forecasting', 'settings', 'help', 'consignment-sales'
     ],
     inventoryViewOnly: false,
     forecastingViewOnly: false,
@@ -28,7 +28,7 @@ const ROLES = {
     allowedRoutes: [
       'dashboard',
       'consignment-overview', 'consignment-approval',
-      'inventory', 'settings', 'help'
+      'inventory', 'settings', 'help', 'consignment-sales'
     ],
     inventoryViewOnly: false,
     forecastingViewOnly: false,
@@ -40,7 +40,7 @@ const ROLES = {
     defaultRoute: 'consignment-overview',
     allowedRoutes: [
       'dashboard', 'consignment-overview', 'consignment-preintake', 'consignment-intake',
-      'inventory', 'settings', 'help'
+      'inventory', 'settings', 'help', 'consignment-sales'
     ],
     inventoryViewOnly: false,
     forecastingViewOnly: true,
@@ -100,7 +100,8 @@ salesAssociate: {
       'clients', 
       'inventory', 
       'settings', 
-      'help'
+      'help',
+      'consignment-sales'
     ],
     inventoryViewOnly: true,
     forecastingViewOnly: true,

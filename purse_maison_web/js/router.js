@@ -20,6 +20,7 @@ const NAV_ITEMS = [
       { label: 'Design & Listing', route: 'consignment-design' },
       { label: 'Pricing & Markup', route: 'consignment-pricing' },
       { label: 'Manager Approvals', route: 'consignment-approval' },
+      { label: 'Sales & Payouts', route: 'consignment-sales' },
     ]
   },
   { label: 'Inventory Management', route: 'inventory' },
@@ -38,6 +39,7 @@ const PAGES = {
   'consignment-design': ConsignmentPage,
   'consignment-pricing': ConsignmentPage,
   'consignment-approval': ConsignmentPage,
+  'consignment-sales': ConsignmentPage,
   consignment: ConsignmentPage,
   inventory: InventoryPage,
   clients: ClientsPage,
