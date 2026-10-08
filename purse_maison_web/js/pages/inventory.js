@@ -42,7 +42,7 @@ const InventoryPage = {
   filterAndSortItems(items) {
     let list = [...items];
 
-    // Time-range filter
+    // Time range filter
     if (this.filterTimeRange !== 'all') {
       const now = new Date();
       let cutoff;
@@ -122,29 +122,42 @@ const InventoryPage = {
         ${viewOnly ? '' : `<button class="btn-add" id="btn-add-inventory">+ Add Item</button>`}
       </div>
 
-      <div class="table-scroll">
+<div class="table-scroll">
         <table class="data-table">
-          <thead><tr>
-            <th>Item ID</th><th>Brand</th><th>Category</th><th>Condition</th><th>Status</th>
-            <th>Location</th><th>Date Added</th><th>Transaction Status</th><th>Price</th>
-            ${viewOnly ? '' : '<th>Actions</th>'}
-          </tr></thead>
+          <thead>
+            <tr>
+              <th style="text-align: center;">Item ID</th>
+              <th style="text-align: center;">Brand</th>
+              <th style="text-align: center;">Category</th>
+              <th style="text-align: center;">Condition</th>
+              <th style="text-align: center;">Status</th>
+              <th style="text-align: center;">Location</th>
+              <th style="text-align: center;">Date Added</th>
+              <th style="text-align: center;">Transaction Status</th>
+              <th style="text-align: center;">Price</th>
+              ${viewOnly ? '' : '<th style="text-align: center;">Actions</th>'}
+            </tr>
+          </thead>
           <tbody>
-            ${pageItems.length === 0 ? `<tr><td colspan="${viewOnly ? 9 : 10}" class="cell-center cell-muted" style="padding:24px;">No inventory items match your search or filters.</td></tr>` :
+            ${pageItems.length === 0 ? `<tr><td colspan="${viewOnly ? 9 : 10}" class="cell-center cell-muted" style="padding:24px; text-align: center;">No inventory items match your search or filters.</td></tr>` :
               pageItems.map((item) => `
-              <tr>
-                <td>${escapeHtml(item.id)}</td>
-                <td class="cell-bold">${escapeHtml(item.brand)}</td>
-                <td>${escapeHtml(item.category)}</td>
-                <td>${escapeHtml(item.condition)}</td>
-                <td class="cell-center">${this.statusBadge(item.status)}</td>
-                <td class="cell-center">${escapeHtml(item.location)}</td>
-                <td class="cell-center">${escapeHtml(item.dateAdded)}</td>
-                <td class="cell-center">${this.transactionCell(item.transactionStatus)}</td>
-                <td class="cell-bold">${escapeHtml(item.price)}</td>
-                ${viewOnly ? '' : `<td><div class="row-actions">
-                  <button class="icon-btn" data-edit-inv="${item.id}" title="Edit">✎</button>
-                  <button class="icon-btn danger" data-delete-inv="${item.id}" title="Delete">🗑</button>
+              <tr style="text-align: center; vertical-align: middle;">
+                <td style="text-align: center; vertical-align: middle;">${escapeHtml(item.id)}</td>
+                <td class="cell-bold" style="text-align: center; vertical-align: middle;">${escapeHtml(item.brand)}</td>
+                <td style="text-align: center; vertical-align: middle;">${escapeHtml(item.category)}</td>
+                <td style="text-align: center; vertical-align: middle;">${escapeHtml(item.condition)}</td>
+                <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.statusBadge(item.status)}</td>
+                <td class="cell-center" style="text-align: center; vertical-align: middle;">${escapeHtml(item.location)}</td>
+                <td class="cell-center" style="text-align: center; vertical-align: middle;">${escapeHtml(item.dateAdded)}</td>
+                <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.transactionCell(item.transactionStatus)}</td>
+                <td class="cell-bold" style="text-align: center; vertical-align: middle;">${escapeHtml(item.price)}</td>
+                ${viewOnly ? '' : `<td style="text-align: center; vertical-align: middle;"><div class="row-actions" style="justify-content: center;">
+                  <button class="icon-btn" data-edit-inv="${item.id}" title="Edit">
+                    <i class="fa-solid fa-pen"></i>
+                  </button>
+                  <button class="icon-btn danger" data-delete-inv="${item.id}" title="Delete">
+                    <i class="fa-solid fa-trash-can"></i>
+                  </button>
                 </div></td>`}
               </tr>`).join('')}
           </tbody>
@@ -197,7 +210,7 @@ const InventoryPage = {
       }, 300));
     }
 
-    //Time-range filter
+    //Time range filter
     const timeFilter = document.getElementById('inventory-time-filter');
     if (timeFilter) {
       timeFilter.addEventListener('change', (e) => {
@@ -217,7 +230,6 @@ const InventoryPage = {
       });
     }
 
-    //Sort select
     const sortSelect = document.getElementById('inventory-sort-select');
     if (sortSelect) {
       sortSelect.addEventListener('change', (e) => {
@@ -227,7 +239,6 @@ const InventoryPage = {
       });
     }
 
-    //pagination
     document.getElementById('inventory-pagination').addEventListener('click', (e) => {
       const btn = e.target.closest('[data-page]');
       if (!btn) return;
@@ -235,7 +246,6 @@ const InventoryPage = {
       Router.rerender();
     });
 
-    //row actions
     document.querySelectorAll('[data-edit-inv]').forEach((btn) => {
       btn.addEventListener('click', () => this.openForm(items.find((i) => i.id === btn.dataset.editInv)));
     });
@@ -276,7 +286,7 @@ const InventoryPage = {
       fill: false, tension: 0.35, pointRadius: 4, pointBackgroundColor: '#10184F',
     }], { yPrefix: '' });
 
-    //slowest-moving leaderboard
+    //slowes moving items
     const inventoryById = Object.fromEntries(filteredItems.map((i) => [i.id, i]));
     const entries = [];
     for (const t of DB.salesTransactions) {

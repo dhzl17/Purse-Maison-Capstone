@@ -88,7 +88,6 @@ function confirmDelete(itemLabel, onConfirm) {
   });
 }
 
-//Toasts 
 function showToast(message) {
   const stack = document.getElementById('toast-stack');
   const el = document.createElement('div');
@@ -98,7 +97,6 @@ function showToast(message) {
   setTimeout(() => el.remove(), 3500);
 }
 
-//Debounce 
 function debounce(func, wait = 300) {
   let timeout;
   return function executedFunction(...args) {
@@ -111,7 +109,6 @@ function debounce(func, wait = 300) {
   };
 }
 
-//SLA Countdown
 function renderSLABadge(createdAtMs, targetHours = 24) {
   if (!createdAtMs) {
     return `<span class="sla-badge normal">⏱ 18h 30m SLA</span>`;
@@ -134,7 +131,6 @@ function renderSLABadge(createdAtMs, targetHours = 24) {
   return `<span class="sla-badge normal">⏱ ${hours}h ${minutes}m remaining</span>`;
 }
 
-//Record Sorting 
 function sortRecords(records, sortBy = 'recently') {
   const list = [...records];
   switch (sortBy) {
@@ -167,7 +163,6 @@ function sortRecords(records, sortBy = 'recently') {
   }
 }
 
-//Universal Search Bar
 function renderUniversalSearchBar(inputId, placeholder = 'Search by ID, Brand, Name, Serial #, Consignor...') {
   return `
 <div class="universal-search-wrap">

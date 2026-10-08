@@ -49,8 +49,8 @@ const ForecastingPage = {
         <div class="chart-card">
           <div class="card-title" style="margin-bottom:14px;">Historical vs Projected Sales by Brand</div>
           <div class="legend-row">
-            <div class="legend-item"><span class="legend-dot" style="background:#6C86FF"></span>Historical (6mo)</div>
-            <div class="legend-item"><span class="legend-dot" style="background:#10184F"></span>Projected (3mo)</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#6C86FF"></span>Historical</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#10184F"></span>Projected </div>
           </div>
           <div class="chart-canvas-wrap"><canvas id="chart-brand-forecast"></canvas></div>
         </div>
@@ -64,7 +64,7 @@ const ForecastingPage = {
           </div>
           <div class="table-scroll">
             <table class="data-table">
-              <thead><tr><th>Brand</th><th>Historical (6mo)</th><th>Projected (3mo)</th><th>Growth %</th><th>Trend</th>${viewOnly ? '' : '<th>Actions</th>'}</tr></thead>
+              <thead><tr><th>Brand</th><th>Historical</th><th>Projected</th><th>Growth %</th><th>Trend</th>${viewOnly ? '' : '<th>Actions</th>'}</tr></thead>
               <tbody>
                 ${forecasts.map((f) => `
                   <tr>
@@ -74,8 +74,12 @@ const ForecastingPage = {
                     <td class="${f.projectedGrowthPercent >= 0 ? '' : ''}" style="color:${f.projectedGrowthPercent >= 0 ? 'var(--green)' : 'var(--danger-red)'};font-weight:600;">${f.projectedGrowthPercent >= 0 ? '+' : ''}${f.projectedGrowthPercent}%</td>
                     <td class="cell-center">${this.trendBadge(f.trend)}</td>
                     ${viewOnly ? '' : `<td><div class="row-actions">
-                      <button class="icon-btn" data-edit-forecast="${escapeHtml(f.brand)}" title="Edit">✎</button>
-                      <button class="icon-btn danger" data-delete-forecast="${escapeHtml(f.brand)}" title="Delete">🗑</button>
+                      <button class="icon-btn" data-edit-forecast="${escapeHtml(f.brand)}" title="Edit">
+                        <i class="fa-solid fa-pen"></i>
+                      </button>
+                      <button class="icon-btn danger" data-delete-forecast="${escapeHtml(f.brand)}" title="Delete">
+                        <i class="fa-solid fa-trash-can"></i>
+                      </button>
                     </div></td>`}
                   </tr>`).join('')}
               </tbody>

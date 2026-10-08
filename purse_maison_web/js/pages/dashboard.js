@@ -79,7 +79,6 @@ const DashboardPage = {
       <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:24px;">
         <div>
           <h1 class="welcome-title" style="margin-bottom:4px;">Welcome, ${escapeHtml(user.fullName || user.username)}!</h1>
-          <div style="font-size:13px; color:var(--text-muted);">Purse Maison Management Portal Overview</div>
         </div>
         <span class="role-badge-tag" style="background:${roleConfig.badgeColor}; font-size:12px; padding:6px 14px;">
           ${escapeHtml(roleConfig.label)}

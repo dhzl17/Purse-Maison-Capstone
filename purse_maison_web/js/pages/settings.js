@@ -13,7 +13,6 @@ const SettingsPage = {
     return `
       <div style="margin-bottom:24px;">
         <h1 class="page-title" style="margin-bottom:4px;">Settings</h1>
-        <p class="cell-muted" style="font-size:14px;">Manage your account, notifications, and security preferences.</p>
       </div>
 
       <div class="section-grid" style="margin-bottom:24px;">
@@ -115,7 +114,7 @@ const SettingsPage = {
             <div class="card-title">Team Accounts & Role Permissions</div>
             <button class="btn-add" id="btn-add-staff">+ Add Staff Account</button>
           </div>
-          <p class="cell-muted" style="font-size:13px; margin-bottom:18px;">Manage workspace accounts and assigned RBAC permissions across all 8 operational roles.</p>
+          <p class="cell-muted" style="font-size:13px; margin-bottom:18px;">Manage workspace accounts and assigned permissions.</p>
           <div id="staff-list">${this.renderStaffList()}</div>
         </div>
       ` : ''}
@@ -141,7 +140,6 @@ const SettingsPage = {
   },
 
   afterRender() {
-    // Account info form submit
     document.getElementById('account-info-form')?.addEventListener('submit', (e) => {
       e.preventDefault();
       const fullName = document.getElementById('settings-fullname').value.trim();
@@ -152,7 +150,6 @@ const SettingsPage = {
       Router.rerender();
     });
 
-    // Password form submit
     document.getElementById('password-form')?.addEventListener('submit', (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -164,13 +161,11 @@ const SettingsPage = {
       showToast('Password updated successfully.');
     });
 
-    // Notifications preferences submit
     document.getElementById('notification-settings-form')?.addEventListener('submit', (e) => {
       e.preventDefault();
       showToast('Notification preferences saved.');
     });
 
-    //Staff creation & removal
     const addStaffBtn = document.getElementById('btn-add-staff');
     if (addStaffBtn) addStaffBtn.addEventListener('click', () => this.openAddStaffForm());
 
@@ -198,7 +193,7 @@ const SettingsPage = {
           <input class="field-input" name="fullname" placeholder="e.g. Sarah Connor" required />
         </div>
         <div class="field-group">
-          <label class="field-label">Username (no spaces — used for login)</label>
+          <label class="field-label">Username</label>
           <input class="field-input" name="username" placeholder="e.g. sconnor" required pattern="\\S+" />
         </div>
         <div class="field-group">

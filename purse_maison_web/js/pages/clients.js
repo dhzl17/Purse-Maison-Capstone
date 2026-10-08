@@ -66,23 +66,38 @@ const ClientsPage = {
             <span class="card-title">Client Inquiries</span>
             <button class="btn-add" id="btn-add-inquiry">+ Add Inquiry</button>
           </div>
-          <div class="table-scroll">
+<div class="table-scroll">
             <table class="data-table">
-              <thead><tr><th>No.</th><th>Client Name</th><th>Type</th><th>Role</th><th>Status</th><th>Source</th><th>Result</th><th>Actions</th></tr></thead>
+              <thead>
+                <tr>
+                  <th style="text-align: center;">No.</th>
+                  <th style="text-align: center;">Client Name</th>
+                  <th style="text-align: center;">Type</th>
+                  <th style="text-align: center;">Role</th>
+                  <th style="text-align: center;">Status</th>
+                  <th style="text-align: center;">Source</th>
+                  <th style="text-align: center;">Result</th>
+                  <th style="text-align: center;">Actions</th>
+                </tr>
+              </thead>
               <tbody>
-                ${inquiries.length === 0 ? `<tr><td colspan="8" class="cell-center cell-muted" style="padding:18px;">No inquiries match your search.</td></tr>` :
+                ${inquiries.length === 0 ? `<tr><td colspan="8" class="cell-center cell-muted" style="padding:18px; text-align: center;">No inquiries match your search.</td></tr>` :
                   inquiries.map((i) => `
-                  <tr>
-                    <td>${i.no}</td>
-                    <td class="cell-bold">${escapeHtml(i.clientName)}</td>
-                    <td class="cell-center">${escapeHtml(i.clientType)}</td>
-                    <td class="cell-center">${escapeHtml(i.clientRole)}</td>
-                    <td class="cell-center">${this.inquiryStatusBadge(i.inquiryStatus)}</td>
-                    <td class="cell-center">${escapeHtml(i.inquirySource)}</td>
-                    <td class="cell-center">${this.transactionResultCell(i.transactionResult)}</td>
-                    <td><div class="row-actions">
-                      <button class="icon-btn" data-edit-inquiry="${i.id}" title="Edit">✎</button>
-                      <button class="icon-btn danger" data-delete-inquiry="${i.id}" title="Delete">🗑</button>
+                  <tr style="text-align: center; vertical-align: middle;">
+                    <td style="text-align: center; vertical-align: middle;">${i.no}</td>
+                    <td class="cell-bold" style="text-align: center; vertical-align: middle;">${escapeHtml(i.clientName)}</td>
+                    <td class="cell-center" style="text-align: center; vertical-align: middle; white-space: nowrap;">${escapeHtml(i.clientType)}</td>
+                    <td class="cell-center" style="text-align: center; vertical-align: middle;">${escapeHtml(i.clientRole)}</td>
+                    <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.inquiryStatusBadge(i.inquiryStatus)}</td>
+                    <td class="cell-center" style="text-align: center; vertical-align: middle;">${escapeHtml(i.inquirySource)}</td>
+                    <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.transactionResultCell(i.transactionResult)}</td>
+                    <td style="text-align: center; vertical-align: middle;"><div class="row-actions" style="justify-content: center;">
+                        <button class="icon-btn" data-edit-inquiry="${i.id}" title="Edit">
+                          <i class="fa-solid fa-pen"></i>
+                        </button>
+                        <button class="icon-btn danger" data-delete-inquiry="${i.id}" title="Delete">
+                          <i class="fa-solid fa-trash-can"></i>
+                        </button>
                     </div></td>
                   </tr>`).join('')}
               </tbody>
@@ -97,23 +112,34 @@ const ClientsPage = {
           </div>
           <div class="table-scroll">
             <table class="data-table">
-              <thead><tr><th>Name</th><th>Status</th><th>Client</th><th></th></tr></thead>
+              <thead>
+                <tr>
+                  <th style="text-align: center;">Name</th>
+                  <th style="text-align: center;">Status</th>
+                  <th style="text-align: center;">Client</th>
+                  <th style="text-align: center;">Actions</th>
+                </tr>
+              </thead>
               <tbody>
                 ${associates.map((a) => `
-                  <tr>
-                    <td class="cell-bold">${escapeHtml(a.associateName)}</td>
-                    <td class="cell-center">${this.associateStatusBadge(a.status)}</td>
-                    <td class="${a.currentClient === '-' ? 'cell-muted' : ''}">${escapeHtml(a.currentClient)}</td>
-                    <td><div class="row-actions">
-                      <button class="icon-btn" data-edit-assoc="${a.id}" title="Edit">✎</button>
-                      <button class="icon-btn danger" data-delete-assoc="${a.id}" title="Delete">🗑</button>
-                    </div></td>
+                  <tr style="text-align: center; vertical-align: middle;">
+                    <td class="cell-bold" style="text-align: center; vertical-align: middle; white-space: nowrap;">${escapeHtml(a.associateName)}</td>
+                    <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.associateStatusBadge(a.status)}</td>
+                    <td class="${a.currentClient === '-' ? 'cell-muted' : ''}" style="text-align: center; vertical-align: middle;">${escapeHtml(a.currentClient)}</td>
+                    <td style="text-align: center; vertical-align: middle;">
+                      <div class="row-actions">
+                        <button class="icon-btn" data-edit-assoc="${a.id}" title="Edit">
+                          <i class="fa-solid fa-pen"></i>
+                        </button>
+                        <button class="icon-btn danger" data-delete-assoc="${a.id}" title="Delete">
+                          <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                      </div>
+                    </td>
                   </tr>`).join('')}
               </tbody>
             </table>
           </div>
-        </div>
-      </div>
 
       <div class="section-grid">
         <div class="card col-narrow">

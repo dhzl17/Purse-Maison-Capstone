@@ -104,12 +104,17 @@ const ROLES = {
     forecastingViewOnly: false,
     canManageStaff: false,
   },
-  salesAssociate: {
+salesAssociate: {
     label: 'Sales Associate',
     badgeColor: '#4B5563',
-    defaultRoute: 'clients',
+    defaultRoute: 'dashboard',
     allowedRoutes: [
-      'dashboard', 'clients', 'inventory', 'settings', 'help'
+      'dashboard', 
+      'consignment-overview', 
+      'clients', 
+      'inventory', 
+      'settings', 
+      'help'
     ],
     inventoryViewOnly: true,
     forecastingViewOnly: true,

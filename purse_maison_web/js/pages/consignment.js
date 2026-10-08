@@ -99,6 +99,16 @@ function checkDuplicateConsignment(serialNumber, microchipNumber, consignorName)
   return { duplicateSerial, existingCustomer };
 }
 
+
+function safeSaveConsignments() {
+  try {
+    localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+  } catch (err) {
+    console.error('Storage full or restricted:', err);
+    showToast('⚠️ Storage Full! Hindi nai-save sa browser storage ang malalaking photos, pero updated na ito sa screen.');
+  }
+}
+
 const ConsignmentPage = {
   showAll: false,
   searchKeyword: '',
@@ -248,21 +258,25 @@ const ConsignmentPage = {
           <div class="card-title" style="margin-bottom:16px;">Pre-Intake Queue (${preItems.length})</div>
           <div class="table-scroll">
             <table class="data-table">
-              <thead><tr>
-                <th>Lead ID</th><th>Consignor & Channel</th><th>Asking Price</th><th>Lead Status</th><th>Action</th>
+              <thead><tr style="text-align: center;">
+                <th style="text-align: center;">Lead ID</th>
+                <th style="text-align: center;">Consignor & Channel</th>
+                <th style="text-align: center;">Asking Price</th>
+                <th style="text-align: center;">Lead Status</th>
+                <th style="text-align: center;">Action</th>
               </tr></thead>
               <tbody>
-                ${preItems.length === 0 ? '<tr><td colspan="5" class="cell-center cell-muted">No pending pre-intake inquiries.</td></tr>' :
+                ${preItems.length === 0 ? '<tr><td colspan="5" class="cell-center cell-muted" style="text-align: center;">No pending pre-intake inquiries.</td></tr>' :
                   preItems.map(item => `
-                  <tr class="${selectedItem && String(selectedItem.id) === String(item.id) ? 'row-selected' : ''}">
-                    <td><strong>${escapeHtml(item.id)}</strong></td>
-                    <td>
+                  <tr class="${selectedItem && String(selectedItem.id) === String(item.id) ? 'row-selected' : ''}" style="text-align: center; vertical-align: middle;">
+                    <td style="text-align: center; vertical-align: middle;"><strong>${escapeHtml(item.id)}</strong></td>
+                    <td style="text-align: center; vertical-align: middle;">
                       <div style="font-weight:600;">${escapeHtml(item.consignorName || item.itemName)}</div>
                       <div class="cell-muted" style="font-size:11.5px;">${escapeHtml(item.contactChannel || 'Channel N/A')}</div>
                     </td>
-                    <td>${escapeHtml(item.price)}</td>
-                    <td><span class="badge badge-warning">${escapeHtml(item.status)}</span></td>
-                    <td><button class="btn-add" data-preintake-select="${item.id}" data-item-id="${item.id}" style="padding:4px 8px; font-size:11px;">Select</button></td>
+                    <td style="text-align: center; vertical-align: middle;">${escapeHtml(item.price)}</td>
+                    <td style="text-align: center; vertical-align: middle;"><span class="badge badge-warning">${escapeHtml(item.status)}</span></td>
+                    <td style="text-align: center; vertical-align: middle;"><button class="btn-add" data-preintake-select="${item.id}" data-item-id="${item.id}" style="padding:4px 8px; font-size:11px;">Select</button></td>
                   </tr>`).join('')}
               </tbody>
             </table>
@@ -306,7 +320,6 @@ const ConsignmentPage = {
             ` : ''}
           </div>
 
-          
           <div class="field-group">
             <label class="field-label">Fulfillment / Receiving Method</label>
             <select class="field-input" id="pre-fulfillment-type">
@@ -350,21 +363,26 @@ const ConsignmentPage = {
 
         <div class="table-scroll">
           <table class="data-table">
-            <thead><tr>
-              <th>Item ID</th><th>Brand & Item</th><th>Category</th><th>Condition</th><th>Status</th><th>Action</th>
+            <thead><tr style="text-align: center;">
+              <th style="text-align: center;">Item ID</th>
+              <th style="text-align: center;">Brand & Item</th>
+              <th style="text-align: center;">Category</th>
+              <th style="text-align: center;">Condition</th>
+              <th style="text-align: center;">Status</th>
+              <th style="text-align: center;">Action</th>
             </tr></thead>
             <tbody>
-              ${photoItems.length === 0 ? '<tr><td colspan="6" class="cell-center cell-muted">No items pending photography.</td></tr>' : 
+              ${photoItems.length === 0 ? '<tr><td colspan="6" class="cell-center cell-muted" style="text-align: center;">No items pending photography.</td></tr>' : 
                 photoItems.map((item) => `
-                <tr class="${selectedItem && String(selectedItem.id) === String(item.id) ? 'row-selected' : ''}">
-                  <td><strong>${escapeHtml(item.id)}</strong></td>
-                  <td>
+                <tr class="${selectedItem && String(selectedItem.id) === String(item.id) ? 'row-selected' : ''}" style="text-align: center; vertical-align: middle;">
+                  <td style="text-align: center; vertical-align: middle;"><strong>${escapeHtml(item.id)}</strong></td>
+                  <td style="text-align: center; vertical-align: middle;">
                     <div style="font-weight:600;">${escapeHtml(item.itemName)}</div>
                     <div class="cell-muted" style="font-size:11.5px;">SN: ${escapeHtml(item.serialNumber || 'N/A')}</div>
                   </td>
-                  <td>${escapeHtml(item.category)}</td>
-                  <td>${escapeHtml(item.condition)}</td>
-                  <td>
+                  <td style="text-align: center; vertical-align: middle;">${escapeHtml(item.category)}</td>
+                  <td style="text-align: center; vertical-align: middle;">${escapeHtml(item.condition)}</td>
+                  <td style="text-align: center; vertical-align: middle;">
                     <select 
                       class="field-input photo-status-select" 
                       data-item-id="${item.id}" 
@@ -380,13 +398,14 @@ const ConsignmentPage = {
                         cursor: pointer;
                         outline: none;
                         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+                        margin: 0 auto;
                       "
                     >
                       <option value="For Photography" ${item.status === 'For Photography' ? 'selected' : ''}>For Photography</option>
                       <option value="In Photography" ${item.status === 'In Photography' ? 'selected' : ''}>In Photography</option>
                     </select>
                   </td>
-                  <td><button class="btn-add" data-photo-upload="${item.id}" data-item-id="${item.id}" style="padding:6px 12px; font-size:12px;">Select Item</button></td>
+                  <td style="text-align: center; vertical-align: middle;"><button class="btn-add" data-photo-upload="${item.id}" data-item-id="${item.id}" style="padding:6px 12px; font-size:12px;">Select Item</button></td>
                 </tr>`).join('')}
             </tbody>
           </table>
@@ -406,27 +425,27 @@ const ConsignmentPage = {
         <div class="photo-grid-5" style="display:grid; grid-template-columns:repeat(5, 1fr); gap:10px; margin-top:20px;">
           <div class="photo-slot-card" id="slot-0" style="border:1px solid #E2E8F0; padding:10px; border-radius:6px; text-align:center;">
             <div style="font-size:12px; font-weight:600;">1. Front View</div>
-            <div class="photo-preview-box" style="margin:10px 0; min-height:40px;"></div>
+            <div class="photo-preview-box" style="margin:10px 0; height:140px; display:flex; align-items:center; justify-content:center; background:#F1F5F9; border-radius:6px; overflow:hidden;"></div>
             <div class="slot-status" style="font-size:11px; color:var(--danger-red); font-weight:600;">Missing</div>
           </div>
           <div class="photo-slot-card" id="slot-1" style="border:1px solid #E2E8F0; padding:10px; border-radius:6px; text-align:center;">
             <div style="font-size:12px; font-weight:600;">2. Back View</div>
-            <div class="photo-preview-box" style="margin:10px 0; min-height:40px;"></div>
+            <div class="photo-preview-box" style="margin:10px 0; height:140px; display:flex; align-items:center; justify-content:center; background:#F1F5F9; border-radius:6px; overflow:hidden;"></div>
             <div class="slot-status" style="font-size:11px; color:var(--danger-red); font-weight:600;">Missing</div>
           </div>
           <div class="photo-slot-card" id="slot-2" style="border:1px solid #E2E8F0; padding:10px; border-radius:6px; text-align:center;">
             <div style="font-size:12px; font-weight:600;">3. Serial Tag</div>
-            <div class="photo-preview-box" style="margin:10px 0; min-height:40px;"></div>
+            <div class="photo-preview-box" style="margin:10px 0; height:140px; display:flex; align-items:center; justify-content:center; background:#F1F5F9; border-radius:6px; overflow:hidden;"></div>
             <div class="slot-status" style="font-size:11px; color:var(--danger-red); font-weight:600;">Missing</div>
           </div>
           <div class="photo-slot-card" id="slot-3" style="border:1px solid #E2E8F0; padding:10px; border-radius:6px; text-align:center;">
             <div style="font-size:12px; font-weight:600;">4. Interior View</div>
-            <div class="photo-preview-box" style="margin:10px 0; min-height:40px;"></div>
+            <div class="photo-preview-box" style="margin:10px 0; height:140px; display:flex; align-items:center; justify-content:center; background:#F1F5F9; border-radius:6px; overflow:hidden;"></div>
             <div class="slot-status" style="font-size:11px; color:var(--danger-red); font-weight:600;">Missing</div>
           </div>
           <div class="photo-slot-card" id="slot-4" style="border:1px solid #E2E8F0; padding:10px; border-radius:6px; text-align:center;">
             <div style="font-size:12px; font-weight:600;">5. Accessories</div>
-            <div class="photo-preview-box" style="margin:10px 0; min-height:40px;"></div>
+            <div class="photo-preview-box" style="margin:10px 0; height:140px; display:flex; align-items:center; justify-content:center; background:#F1F5F9; border-radius:6px; overflow:hidden;"></div>
             <div class="slot-status" style="font-size:11px; color:var(--danger-red); font-weight:600;">Missing</div>
           </div>
         </div>
@@ -445,9 +464,12 @@ const ConsignmentPage = {
 /* ==========================================================================
      SUBTAB 3: AUTHENTICATION SUBTAB
      ========================================================================== */
-  renderAuthenticationView() {
+renderAuthenticationView() {
     const authQueue = DB.consignments.filter(i => 
-      i.authentication === 'pending' || i.status === 'Pending Authentication Payment' || i.status === 'Pending Authentication'
+      (i.status === 'Pending Authentication Payment' || i.status === 'Pending Authentication') &&
+      !i.status.includes('Inquiry') && 
+      !i.status.includes('Pre-Intake') && 
+      !i.status.includes('In Transit')
     );
 
     const selectedItem = window.activeAuthItemId
@@ -457,7 +479,6 @@ const ConsignmentPage = {
     return `
       <div style="margin-bottom:20px;">
         <h1 class="page-title" style="margin-bottom:4px;">Authentication Service</h1>
-        <p class="cell-muted" style="font-size:13.5px;">Manage double-authentication decisions, certificates, 2-factor verification, and 12–24h SLA timers.</p>
       </div>
 
       <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start;">
@@ -469,22 +490,27 @@ const ConsignmentPage = {
 
           <div class="table-scroll">
             <table class="data-table">
-              <thead><tr>
-                <th>Item ID</th><th>Item Details</th><th>24h SLA Countdown</th><th>Double Auth Verification</th><th>Status</th><th>Action</th>
+              <thead><tr style="text-align: center;">
+                <th style="text-align: center;">Item ID</th>
+                <th style="text-align: center;">Item Details</th>
+                <th style="text-align: center;">24h SLA Countdown</th>
+                <th style="text-align: center;">Authentication Verification</th>
+                <th style="text-align: center;">Status</th>
+                <th style="text-align: center;">Action</th>
               </tr></thead>
               <tbody>
-                ${authQueue.length === 0 ? '<tr><td colspan="6" class="cell-center cell-muted" style="padding: 24px;">No items pending authentication.</td></tr>' :
+                ${authQueue.length === 0 ? '<tr><td colspan="6" class="cell-center cell-muted" style="padding: 24px; text-align: center;">No items pending authentication.</td></tr>' :
                   authQueue.map(item => `
-                  <tr class="${selectedItem && String(selectedItem.id) === String(item.id) ? 'row-selected' : ''}">
-                    <td><strong>${escapeHtml(item.id)}</strong></td>
-                    <td>
+                  <tr class="${selectedItem && String(selectedItem.id) === String(item.id) ? 'row-selected' : ''}" style="text-align: center; vertical-align: middle;">
+                    <td style="text-align: center; vertical-align: middle;"><strong>${escapeHtml(item.id)}</strong></td>
+                    <td style="text-align: center; vertical-align: middle;">
                       <div style="font-weight:600;">${escapeHtml(item.itemName)}</div>
                       <div class="cell-muted" style="font-size:11.5px;">SN: ${escapeHtml(item.serialNumber || 'N/A')}</div>
                     </td>
-                    <td>${renderSLABadge(item.createdAtMs, 24)}</td>
-                    <td>${this.doubleAuthBadge(item.primaryAuthStatus, item.secondaryAuthStatus)}</td>
-                    <td>${this.authBadge(item.authentication)}</td>
-                    <td>
+                    <td style="text-align: center; vertical-align: middle;">${renderSLABadge(item.createdAtMs, 24)}</td>
+                    <td style="text-align: center; vertical-align: middle;">${this.doubleAuthBadge(item.primaryAuthStatus, item.secondaryAuthStatus)}</td>
+                    <td style="text-align: center; vertical-align: middle;">${this.authBadge(item.authentication)}</td>
+                    <td style="text-align: center; vertical-align: middle;">
                       ${item.authPaymentStatus === 'Paid' ? `
                         <button class="badge badge-success" data-auth-select="${item.id}" data-item-id="${item.id}" style="cursor: pointer; border: 1px solid #48BB78; text-decoration: none;">
                           Paid
@@ -502,7 +528,7 @@ const ConsignmentPage = {
         </div>
 
         <div class="card" style="margin: 0;">
-          <div class="card-title" style="margin-bottom:14px;">Double-Authentication Panel ${selectedItem ? `(#${escapeHtml(selectedItem.id)})` : ''}</div>
+          <div class="card-title" style="margin-bottom:14px;">Authentication Panel ${selectedItem ? `(#${escapeHtml(selectedItem.id)})` : ''}</div>
           
           ${selectedItem ? `
             <div class="double-auth-box">
@@ -514,7 +540,7 @@ const ConsignmentPage = {
 
           <div class="field-group" style="margin-bottom: 12px;">
             <label class="field-label">1st Primary Authenticator</label>
-            <input class="field-input" id="auth-authenticator-input" value="${escapeHtml(selectedItem?.authenticatorName || 'Dr. Arthur Pendelton')}" placeholder="e.g. Dr. Arthur Pendelton" />
+            <input class="field-input" id="auth-authenticator-input" value="${escapeHtml(selectedItem?.authenticatorName || '')}" placeholder="e.g. John Doe" />
           </div>
           <div class="field-group" style="margin-bottom: 12px;">
             <label class="field-label">1st Verification Outcome</label>
@@ -527,7 +553,7 @@ const ConsignmentPage = {
 
           <div class="field-group" style="margin-bottom: 12px;">
             <label class="field-label">2nd Secondary Verifier</label>
-            <input class="field-input" id="auth-secondary-verifier-input" value="${escapeHtml(selectedItem?.secondaryVerifierName || 'Victoria Sterling')}" placeholder="e.g. Victoria Sterling" />
+            <input class="field-input" id="auth-secondary-verifier-input" value="${escapeHtml(selectedItem?.secondaryVerifierName || '')}" placeholder="e.g. Jane Smith" />
           </div>
           <div class="field-group" style="margin-bottom: 12px;">
             <label class="field-label">2nd Verification Outcome</label>
@@ -554,7 +580,7 @@ const ConsignmentPage = {
               <option value="fake">Fake / Counterfeit Item (Close & Flag in Database)</option>
             </select>
           </div>
-          <button class="btn-confirm" style="width:100%;" id="btn-save-auth-decision" data-item-id="${selectedItem ? selectedItem.id : ''}">Submit Double Auth & Advance Stage</button>
+          <button class="btn-confirm" style="width:100%;" id="btn-save-auth-decision" data-item-id="${selectedItem ? selectedItem.id : ''}">Submit</button>
         </div>
 
       </div>
@@ -581,16 +607,22 @@ const ConsignmentPage = {
           <div class="card-title" style="margin-bottom:16px;">Design Queue (${designQueue.length})</div>
           <div class="table-scroll">
             <table class="data-table">
-              <thead><tr><th>Item ID</th><th>Current Name</th><th>Category</th><th>Status</th><th>Action</th></tr></thead>
+              <thead><tr style="text-align: center;">
+                <th style="text-align: center;">Item ID</th>
+                <th style="text-align: center;">Current Name</th>
+                <th style="text-align: center;">Category</th>
+                <th style="text-align: center;">Status</th>
+                <th style="text-align: center;">Action</th>
+              </tr></thead>
               <tbody>
-                ${designQueue.length === 0 ? '<tr><td colspan="5" class="cell-center cell-muted">No items pending listing design.</td></tr>' :
+                ${designQueue.length === 0 ? '<tr><td colspan="5" class="cell-center cell-muted" style="text-align: center;">No items pending listing design.</td></tr>' :
                   designQueue.map(item => `
-                  <tr class="${activeItem && String(activeItem.id) === String(item.id) ? 'row-selected' : ''}">
-                    <td><strong>${escapeHtml(item.id)}</strong></td>
-                    <td>${escapeHtml(item.itemName)}</td>
-                    <td>${escapeHtml(item.category)}</td>
-                    <td><span class="badge badge-warning">${escapeHtml(item.status)}</span></td>
-                    <td><button class="btn-add" data-design-select="${item.id}" data-item-id="${item.id}" style="padding:4px 8px; font-size:11px;">Select Item</button></td>
+                  <tr class="${activeItem && String(activeItem.id) === String(item.id) ? 'row-selected' : ''}" style="text-align: center; vertical-align: middle;">
+                    <td style="text-align: center; vertical-align: middle;"><strong>${escapeHtml(item.id)}</strong></td>
+                    <td style="text-align: center; vertical-align: middle;">${escapeHtml(item.itemName)}</td>
+                    <td style="text-align: center; vertical-align: middle;">${escapeHtml(item.category)}</td>
+                    <td style="text-align: center; vertical-align: middle;"><span class="badge badge-warning">${escapeHtml(item.status)}</span></td>
+                    <td style="text-align: center; vertical-align: middle;"><button class="btn-add" data-design-select="${item.id}" data-item-id="${item.id}" style="padding:4px 8px; font-size:11px;">Select Item</button></td>
                   </tr>`).join('')}
               </tbody>
             </table>
@@ -654,26 +686,32 @@ const ConsignmentPage = {
         <div class="card-title" style="margin-bottom:16px;">Pricing Review & Approval Matrix (${pricingQueue.length})</div>
         <div class="table-scroll">
           <table class="data-table">
-            <thead><tr>
-              <th>Item ID</th><th>Item Name</th><th>Consignor Asking Price</th><th>Auto Markup</th><th>Final Selling Price</th><th>Status</th><th>Action</th>
+            <thead><tr style="text-align: center;">
+              <th style="text-align: center;">Item ID</th>
+              <th style="text-align: center;">Item Name</th>
+              <th style="text-align: center;">Consignor Asking Price</th>
+              <th style="text-align: center;">Auto Markup</th>
+              <th style="text-align: center;">Final Selling Price</th>
+              <th style="text-align: center;">Status</th>
+              <th style="text-align: center;">Action</th>
             </tr></thead>
             <tbody>
-              ${pricingQueue.length === 0 ? '<tr><td colspan="7" class="cell-center cell-muted">No items currently pending pricing review.</td></tr>' :
+              ${pricingQueue.length === 0 ? '<tr><td colspan="7" class="cell-center cell-muted" style="text-align: center;">No items currently pending pricing review.</td></tr>' :
                 pricingQueue.map(item => {
                   const calc = calculateMarkup(item.price, item.category);
 
                   return `
-                  <tr>
-                    <td><strong>${escapeHtml(item.id)}</strong></td>
-                    <td>
+                  <tr style="text-align: center; vertical-align: middle;">
+                    <td style="text-align: center; vertical-align: middle;"><strong>${escapeHtml(item.id)}</strong></td>
+                    <td style="text-align: center; vertical-align: middle;">
                       <div style="font-weight:600;">${escapeHtml(item.itemName)}</div>
                       <div class="cell-muted" style="font-size:11.5px;">${escapeHtml(item.category)} · ${escapeHtml(item.condition)}</div>
                     </td>
-                    <td>${escapeHtml(item.price)}</td>
-                    <td><span class="badge badge-info">${calc.label}</span></td>
-                    <td><strong style="color:var(--card-navy-dark); font-size:15px;">₱${calc.finalPrice.toLocaleString()}</strong></td>
-                    <td><span class="badge badge-warning">${escapeHtml(item.status)}</span></td>
-                    <td>
+                    <td style="text-align: center; vertical-align: middle;">${escapeHtml(item.price)}</td>
+                    <td style="text-align: center; vertical-align: middle;"><span class="badge badge-info">${calc.label}</span></td>
+                    <td style="text-align: center; vertical-align: middle;"><strong style="color:var(--card-navy-dark); font-size:15px;">₱${calc.finalPrice.toLocaleString()}</strong></td>
+                    <td style="text-align: center; vertical-align: middle;"><span class="badge badge-warning">${escapeHtml(item.status)}</span></td>
+                    <td style="text-align: center; vertical-align: middle;">
                       <button class="btn-confirm" data-approve-price="${item.id}" data-item-id="${item.id}" style="padding:6px 12px; font-size:12px; cursor:pointer;">
                         Approve
                       </button>
@@ -806,24 +844,30 @@ const ConsignmentPage = {
         <div class="card-title" style="margin-bottom:16px;">Manager Approval Queue (${approvalQueue.length})</div>
         <div class="table-scroll">
           <table class="data-table">
-            <thead><tr>
-              <th>Item ID</th><th>Brand & Name</th><th>Authentication</th><th>Photos</th><th>Listing Specs</th><th>Final Price</th><th>Action</th>
+            <thead><tr style="text-align: center;">
+              <th style="text-align: center;">Item ID</th>
+              <th style="text-align: center;">Brand & Name</th>
+              <th style="text-align: center;">Authentication</th>
+              <th style="text-align: center;">Photos</th>
+              <th style="text-align: center;">Listing Specs</th>
+              <th style="text-align: center;">Final Price</th>
+              <th style="text-align: center;">Action</th>
             </tr></thead>
             <tbody>
-              ${approvalQueue.length === 0 ? '<tr><td colspan="7" class="cell-center cell-muted">No items currently pending executive approval.</td></tr>' :
+              ${approvalQueue.length === 0 ? '<tr><td colspan="7" class="cell-center cell-muted" style="text-align: center;">No items currently pending executive approval.</td></tr>' :
                 approvalQueue.map(item => {
                   const calc = calculateMarkup(item.price, item.category);
 
                   return `
-                  <tr>
-                    <td><strong>${escapeHtml(item.id)}</strong></td>
-                    <td><div style="font-weight:600;">${escapeHtml(item.itemName)}</div></td>
-                    <td>${this.authBadge(item.authentication)}</td>
-                    <td><span class="badge badge-success">${item.photoSet?.length || 5}/5 Photos</span></td>
-                    <td><span class="badge badge-success">SEO Draft Ready</span></td>
-                    <td><strong>₱${calc.finalPrice.toLocaleString()}</strong></td>
-                    <td>
-                      <div class="row-actions">
+                  <tr style="text-align: center; vertical-align: middle;">
+                    <td style="text-align: center; vertical-align: middle;"><strong>${escapeHtml(item.id)}</strong></td>
+                    <td style="text-align: center; vertical-align: middle;"><div style="font-weight:600;">${escapeHtml(item.itemName)}</div></td>
+                    <td style="text-align: center; vertical-align: middle;">${this.authBadge(item.authentication)}</td>
+                    <td style="text-align: center; vertical-align: middle;"><span class="badge badge-success">${item.photoSet?.length || 5}/5 Photos</span></td>
+                    <td style="text-align: center; vertical-align: middle;"><span class="badge badge-success">SEO Draft Ready</span></td>
+                    <td style="text-align: center; vertical-align: middle;"><strong>₱${calc.finalPrice.toLocaleString()}</strong></td>
+                    <td style="text-align: center; vertical-align: middle;">
+                      <div class="row-actions" style="justify-content: center;">
                         <button class="btn-confirm" data-manager-approve="${item.id}" data-item-id="${item.id}" style="padding:6px 12px; font-size:11.5px;">Approve</button>
                         <button class="btn-secondary" data-manager-reject="${item.id}" data-item-id="${item.id}" style="padding:6px 12px; font-size:11.5px;">Revision</button>
                       </div>
@@ -863,23 +907,31 @@ const ConsignmentPage = {
 
       <div class="table-scroll">
         <table class="data-table">
-          <thead><tr>
-            <th>Item ID</th><th>Brand</th><th>Details</th><th>Authentication</th>
-            <th>Status</th><th>Price</th><th>Payout Status</th><th>Actions</th>
-          </tr></thead>
+          <thead>
+            <tr style="text-align: center;">
+              <th style="text-align: center;">Item ID</th>
+              <th style="text-align: center;">Brand</th>
+              <th style="text-align: center;">Details</th>
+              <th style="text-align: center;">Authentication</th>
+              <th style="text-align: center;">Status</th>
+              <th style="text-align: center;">Price</th>
+              <th style="text-align: center;">Payout Status</th>
+              <th style="text-align: center;">Actions</th>
+            </tr>
+          </thead>
           <tbody>
-            ${visible.length === 0 ? '<tr><td colspan="8" class="cell-center cell-muted" style="padding:24px;">No consignment items found matching query.</td></tr>' :
+            ${visible.length === 0 ? '<tr><td colspan="8" class="cell-center cell-muted" style="padding:24px; text-align: center;">No consignment items found matching query.</td></tr>' :
               visible.map((item) => {
               const displayImage = (item.photoSet && item.photoSet.length > 0) 
                 ? item.photoSet[0] 
                 : (item.image && item.image.startsWith('data:') ? item.image : `assets/images/${item.image || 'placeholder.png'}`);
 
               return `
-              <tr>
-                <td>${escapeHtml(item.id)}</td>
-                <td class="cell-bold">${escapeHtml(item.brand)}</td>
-                <td>
-                  <div style="display:flex;align-items:center;gap:10px;">
+              <tr style="text-align: center; vertical-align: middle;">
+                <td style="text-align: center; vertical-align: middle;">${escapeHtml(item.id)}</td>
+                <td class="cell-bold" style="text-align: center; vertical-align: middle;">${escapeHtml(item.brand)}</td>
+                <td style="text-align: left; vertical-align: middle; padding-left: 16px;">
+                  <div style="display:flex; align-items:center; gap:10px;">
                     <img src="${displayImage}" alt="${escapeHtml(item.itemName)}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid #E2E8F0;background:var(--chip-bg)" onerror="this.src='assets/images/placeholder.png'">
                     <div>
                       <div style="font-weight:600;">${escapeHtml(item.itemName)}</div>
@@ -887,14 +939,20 @@ const ConsignmentPage = {
                     </div>
                   </div>
                 </td>
-                <td class="cell-center">${this.doubleAuthBadge(item.primaryAuthStatus || item.authentication, item.secondaryAuthStatus || item.authentication)}</td>
-                <td class="cell-center">${escapeHtml(item.status)}</td>
-                <td class="cell-bold">${escapeHtml(item.price)}</td>
-                <td class="cell-center">${this.payoutBadge(item.payoutStatus)}</td>
-                <td><div class="row-actions">
-                  <button class="icon-btn" data-edit-cons="${item.id}" title="Edit">✎</button>
-                  <button class="icon-btn danger" data-delete-cons="${item.id}" title="Delete">🗑</button>
-                </div></td>
+                <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.doubleAuthBadge(item.primaryAuthStatus || item.authentication, item.secondaryAuthStatus || item.authentication)}</td>
+                <td class="cell-center" style="text-align: center; vertical-align: middle;">${escapeHtml(item.status)}</td>
+                <td class="cell-bold" style="text-align: center; vertical-align: middle;">${escapeHtml(item.price)}</td>
+                <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.payoutBadge(item.payoutStatus)}</td>
+                <td style="text-align: center; vertical-align: middle;">
+                  <div class="row-actions" style="justify-content: center;">
+                    <button class="icon-btn" data-edit-cons="${item.id}" title="Edit">
+                      <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button class="icon-btn danger" data-delete-cons="${item.id}" title="Delete">
+                      <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                  </div>
+                </td>
               </tr>`;
             }).join('')}
           </tbody>
@@ -946,7 +1004,7 @@ const ConsignmentPage = {
           };
 
           DB.consignments.push(newRecord);
-          localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+          safeSaveConsignments();
           showToast(`Inquiry Lead #${newId} captured!`);
           window.activePreIntakeItemId = newId;
           captureForm.reset();
@@ -970,7 +1028,7 @@ const ConsignmentPage = {
               date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             });
             if (counter) targetItem.price = `₱${parseAmountString(counter).toLocaleString()}`;
-            localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+            safeSaveConsignments();
             showToast(`Negotiation logged for Lead #${itemId}.`);
             Router.rerender();
           }
@@ -993,9 +1051,11 @@ const ConsignmentPage = {
             targetItem.fulfillmentType = fulfillmentType;
             targetItem.scheduledReceivingDate = dateVal;
             targetItem.status = 'In Transit to Receiving';
+            
+            window.activePreIntakeItemId = targetItem.id;
 
-            localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
-            showToast(`Lead converted to official Item #${targetItem.id}! Advanced to Step 8 (Intake).`);
+            safeSaveConsignments();
+            showToast(`Lead converted to official Item #${targetItem.id}! Advanced to Intake.`);
             Router.navigate('consignment-intake');
           }
         });
@@ -1012,7 +1072,7 @@ const ConsignmentPage = {
 
           if (targetItem) {
             targetItem.status = newStatus;
-            localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+            safeSaveConsignments();
             showToast(`Item #${itemId} status updated to '${newStatus}'!`);
             Router.rerender();
           }
@@ -1046,10 +1106,13 @@ const ConsignmentPage = {
 
               const slot = document.getElementById(`slot-${slotIdx}`);
               if (slot) {
-                slot.querySelector('.photo-preview-box').innerHTML = `<img src="${event.target.result}" style="width:100%; height:40px; object-fit:cover; border-radius:4px;" />`;
+                const box = slot.querySelector('.photo-preview-box');
                 const statusDiv = slot.querySelector('.slot-status');
-                statusDiv.textContent = 'Uploaded';
-                statusDiv.style.color = 'var(--green)';
+                if (box) box.innerHTML = `<img src="${event.target.result}" style="width:100%; height:100%; max-height:120px; object-fit:contain; border-radius:4px;" />`;
+                if (statusDiv) {
+                  statusDiv.textContent = 'Uploaded';
+                  statusDiv.style.color = 'var(--green)';
+                }
               }
 
               if (countLabel) countLabel.textContent = uploadedPhotos.length;
@@ -1080,9 +1143,38 @@ const ConsignmentPage = {
 
           item.status = 'Pending Listing Design';
           item.photoSet = uploadedPhotos;
-          localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
-          showToast(`Item #${item.id} photos approved! Advanced to Listing Design.`);
+
+          
+          safeSaveConsignments();
+
+          
+          for (let i = 0; i < 5; i++) {
+            const slot = document.getElementById(`slot-${i}`);
+            if (slot) {
+              const previewBox = slot.querySelector('.photo-preview-box');
+              const statusDiv = slot.querySelector('.slot-status');
+              if (previewBox) previewBox.innerHTML = '';
+              if (statusDiv) {
+                statusDiv.textContent = 'Missing';
+                statusDiv.style.color = 'var(--danger-red)';
+              }
+            }
+          }
+
+          uploadedPhotos = [];
+          if (fileInput) fileInput.value = '';
+          if (countLabel) countLabel.textContent = '0';
+          if (validationMsg) {
+            validationMsg.textContent = '0 / 5 photos uploaded';
+            validationMsg.style.color = 'var(--danger-red)';
+          }
+
+          submitBtn.disabled = true;
+          submitBtn.style.opacity = '0.5';
+          submitBtn.style.cursor = 'not-allowed';
+
           window.activePhotoItemId = null;
+          showToast(`Item #${item.id} photos approved! Advanced to Listing Design.`);
           Router.rerender();
         });
       }
@@ -1141,7 +1233,7 @@ const ConsignmentPage = {
           if (outcome === 'authentic' && primaryStatus === 'verified' && secondaryStatus === 'verified') {
             targetItem.authentication = 'verified';
             targetItem.status = 'For Photography';
-            showToast(`Item #${targetItem.id} Double-Verified as Authentic! Advanced to Photography.`);
+            showToast(`Item #${targetItem.id}Verified as Authentic. Advanced to Photography.`);
           } else if (outcome === 'fake' || primaryStatus === 'rejected' || secondaryStatus === 'rejected') {
             targetItem.authentication = 'rejected';
             targetItem.primaryAuthStatus = 'rejected';
@@ -1153,7 +1245,7 @@ const ConsignmentPage = {
             showToast(`Item #${targetItem.id} 1st verification saved. Awaiting 2nd secondary verifier sign-off.`);
           }
 
-          localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+          safeSaveConsignments();
           window.activeAuthItemId = null;
           Router.rerender();
         });
@@ -1184,89 +1276,92 @@ const ConsignmentPage = {
         });
       }
 
-      const form = document.getElementById('intake-form');
-      if (form) {
-        form.addEventListener('submit', (e) => {
-          e.preventDefault();
+ const form = document.getElementById('intake-form');
+if (form) {
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
 
-          const consignorName = document.getElementById('intake-consignor-name')?.value.trim() || '';
-          const govtIdNumber = document.getElementById('intake-govt-id-number')?.value.trim() || '';
-          const serialNumber = document.getElementById('intake-serial-number')?.value.trim() || '';
-          const initialPrice = document.getElementById('intake-asking-price')?.value.trim() || '';
-          const contactChannel = document.getElementById('intake-contact-channel')?.value || 'Instagram Inquiry';
-          const govtIdType = document.getElementById('intake-govt-id-type')?.value || 'Passport';
+    const consignorName = document.getElementById('intake-consignor-name')?.value.trim() || '';
+    const govtIdNumber = document.getElementById('intake-govt-id-number')?.value.trim() || '';
+    const serialNumber = document.getElementById('intake-serial-number')?.value.trim() || '';
+    const initialPrice = document.getElementById('intake-asking-price')?.value.trim() || '';
+    const contactChannel = document.getElementById('intake-contact-channel')?.value || 'Instagram Inquiry';
+    const govtIdType = document.getElementById('intake-govt-id-type')?.value || 'Passport';
 
-          const blockErrors = [];
-          if (!consignorName) blockErrors.push('Consignor Full Name is required.');
-          if (!govtIdNumber) blockErrors.push('Government ID Number is required.');
-          if (!currentGovtIdPhoto) blockErrors.push('Government ID Photo must be uploaded.');
-          if (!serialNumber) blockErrors.push('Serial Number / Microchip ID is required.');
-          if (!initialPrice || parseAmountString(initialPrice) <= 0) blockErrors.push('Initial Asking Price must be greater than ₱0.');
+    const blockErrors = [];
+    if (!consignorName) blockErrors.push('Consignor Full Name is required.');
+    if (!govtIdNumber) blockErrors.push('Government ID Number is required.');
+    if (!currentGovtIdPhoto) blockErrors.push('Government ID Photo must be uploaded.');
+    if (!serialNumber) blockErrors.push('Serial Number / Microchip ID is required.');
+    if (!initialPrice || parseAmountString(initialPrice) <= 0) blockErrors.push('Initial Asking Price must be greater than ₱0.');
 
-          const signatureData = window.getSignatureData ? window.getSignatureData() : null;
-          if (!signatureData) blockErrors.push('E-Signature is required (please sign in the signature pad).');
+    const signatureData = window.getSignatureData ? window.getSignatureData() : null;
+    if (!signatureData) blockErrors.push('E-Signature is required.');
 
-          if (blockErrors.length > 0) {
-            showToast(`Hard-Block: ${blockErrors[0]} (${blockErrors.length} issue(s) to resolve.)`);
-            return;
-          }
+    if (blockErrors.length > 0) {
+      showToast(`Hard-Block: ${blockErrors[0]}`);
+      return;
+    }
 
-          const dupCheck = checkDuplicateConsignment(serialNumber, '', consignorName);
-          if (dupCheck.duplicateSerial) {
-            showToast(`Duplicate serial number "${serialNumber}" already registered in Item #${dupCheck.duplicateSerial.id}!`);
-            return;
-          }
-          if (dupCheck.existingCustomer) {
-            showToast(`ℹRepeat Consignor Identified: ${consignorName} profile linked.`);
-          }
+    const checkedAccessories = Array.from(document.querySelectorAll('.intake-accessory-cb:checked')).map(cb => cb.value);
 
-          const checkedAccessories = Array.from(document.querySelectorAll('.intake-accessory-cb:checked')).map(cb => cb.value);
+    let targetId = window.activePreIntakeItemId;
+    let existingIndex = -1;
 
-          if (window.activePreIntakeItemId) {
-            DB.consignments = DB.consignments.filter(i => String(i.id) !== String(window.activePreIntakeItemId));
-            window.activePreIntakeItemId = null;
-          }
+    if (targetId) {
+      existingIndex = DB.consignments.findIndex(i => String(i.id) === String(targetId));
+    }
 
-          const newId = ConsignmentPage.nextItemId();
-          const newRecord = {
-            id: newId,
-            brand: 'Pending Verification',
-            itemName: `Pending Item — SN: ${serialNumber}`,
-            category: 'Handbags',
-            condition: 'Pending Review',
-            image: 'placeholder.png',
-            authentication: 'pending',
-            primaryAuthStatus: 'pending',
-            secondaryAuthStatus: 'pending',
-            authPaymentStatus: 'Pending',
-            status: 'Pending Authentication Payment',
-            price: `₱${parseAmountString(initialPrice).toLocaleString()}`,
-            payoutStatus: 'notYetSold',
-            consignorName,
-            contactChannel,
-            govtIdType,
-            govtIdNumber,
-            govtIdImage: currentGovtIdPhoto,
-            serialNumber,
-            accessories: checkedAccessories,
-            signatureImage: signatureData,
-            dateAdded: new Date().toLocaleDateString(),
-            postingDate: new Date().toISOString().split('T')[0],
-            createdAtMs: Date.now(),
-            contractDays: 60,
-          };
+    if (existingIndex === -1) {
+      targetId = ConsignmentPage.nextItemId();
+    }
 
-          DB.consignments.push(newRecord);
-          localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
-          showToast(`Record #${newRecord.id} saved! Proceeding to payment...`);
-          
-          form.reset();
-          currentGovtIdPhoto = null;
-          if (window.clearSignaturePad) window.clearSignaturePad();
+    const updatedRecord = {
+      id: targetId,
+      brand: 'Pending Verification',
+      itemName: `Pending Item — SN: ${serialNumber}`,
+      category: 'Handbags',
+      condition: 'Pending Review',
+      image: 'placeholder.png',
+      authentication: 'pending',
+      primaryAuthStatus: 'pending',
+      secondaryAuthStatus: 'pending',
+      authPaymentStatus: 'Pending',
+      status: 'Pending Authentication Payment',
+      price: `₱${parseAmountString(initialPrice).toLocaleString()}`,
+      payoutStatus: 'notYetSold',
+      consignorName,
+      contactChannel,
+      govtIdType,
+      govtIdNumber,
+      govtIdImage: currentGovtIdPhoto,
+      serialNumber,
+      accessories: checkedAccessories,
+      signatureImage: signatureData,
+      dateAdded: new Date().toLocaleDateString(),
+      postingDate: new Date().toISOString().split('T')[0],
+      createdAtMs: Date.now(),
+      contractDays: 60,
+    };
 
-          ConsignmentPage.openAuthPaymentModal(newRecord);
-        });
-      }
+    if (existingIndex !== -1) {
+      DB.consignments[existingIndex] = updatedRecord;
+    } else {
+      DB.consignments.push(updatedRecord);
+    }
+    window.activePreIntakeItemId = null;
+
+    safeSaveConsignments();
+    showToast(`Record #${targetId} updated successfully! Proceeding to payment...`);
+
+    form.reset();
+    currentGovtIdPhoto = null;
+
+    if (window.clearSignaturePad) window.clearSignaturePad();
+
+    ConsignmentPage.openAuthPaymentModal(updatedRecord);
+  });
+}
 
       const termSelect = document.getElementById('intake-term-action-select');
       if (termSelect) {
@@ -1331,7 +1426,7 @@ const ConsignmentPage = {
 
           targetItem.status = 'Pending Pricing Review';
 
-          localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+          safeSaveConsignments();
           showToast(`Item #${targetItem.id} category, condition, inclusions & title saved! Sent to Pricing.`);
           window.activeDesignItemId = null;
           Router.rerender();
@@ -1358,7 +1453,7 @@ const ConsignmentPage = {
             targetItem.price = `₱${calc.finalPrice.toLocaleString()}`;
             targetItem.status = 'Pending Manager Approval';
 
-            localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+            safeSaveConsignments();
             showToast(`Item #${targetItem.id} calculated (₱${calc.finalPrice.toLocaleString()})! Sent to Manager for Final Approval.`);
             Router.rerender();
           }
@@ -1384,7 +1479,7 @@ const ConsignmentPage = {
             if (targetItem) {
               const publishErrors = [];
               if (targetItem.authentication !== 'verified' || targetItem.primaryAuthStatus !== 'verified' || targetItem.secondaryAuthStatus !== 'verified') {
-                publishErrors.push('Double Authentication (Primary + Secondary) must both be verified.');
+                publishErrors.push('Authentication must be verified.');
               }
               if (!targetItem.photoSet || targetItem.photoSet.length < 5) {
                 publishErrors.push(`All 5 required photo angles must be uploaded (currently: ${targetItem.photoSet?.length || 0}/5).`);
@@ -1427,10 +1522,12 @@ const ConsignmentPage = {
                   shopifyProductId: targetItem.shopifyProductId,
                 };
                 DB.inventory.push(newInvItem);
-                localStorage.setItem('inventory_data', JSON.stringify(DB.inventory));
+                try {
+                  localStorage.setItem('inventory_data', JSON.stringify(DB.inventory));
+                } catch (e) { console.error(e); }
               }
 
-              localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+              safeSaveConsignments();
               showToast(`Item #${targetItem.id} approved! Published live, synced to inventory and Shopify storefront (Purse Maison BGC).`);
               Router.rerender();
             }
@@ -1440,7 +1537,7 @@ const ConsignmentPage = {
 
             if (targetItem) {
               targetItem.status = 'Pending Listing Design';
-              localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+              safeSaveConsignments();
               showToast(`Item #${targetItem.id} sent back to Listing Design for revision.`);
               Router.rerender();
             }
@@ -1532,7 +1629,7 @@ const ConsignmentPage = {
         if (item) {
           confirmDelete(`${item.itemName} (${item.id})`, () => {
             DB.consignments = DB.consignments.filter((i) => String(i.id) !== String(id));
-            localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+            safeSaveConsignments();
             showToast('Item deleted.');
             Router.rerender();
           });
@@ -1719,7 +1816,7 @@ const ConsignmentPage = {
           DB.consignments.push(record);
         }
 
-        localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+        safeSaveConsignments();
         closeModal();
         showToast(isEdit ? `Consignment #${id} updated.` : `Consignment #${id} created.`);
         Router.rerender();
@@ -1789,7 +1886,7 @@ const ConsignmentPage = {
         targetItem.pulloutNotes = notes;
         targetItem.pulloutDate = new Date().toLocaleDateString();
 
-        localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+        safeSaveConsignments();
         closeModal();
         showToast(`Item #${item.id} withdrawal confirmed. Status updated to Return to Consignor.`);
         Router.rerender();
@@ -1855,7 +1952,7 @@ const ConsignmentPage = {
         targetItem.contractDays = (targetItem.contractDays || 90) + days;
         targetItem.extensionHistory = targetItem.extensionHistory || [];
         targetItem.extensionHistory.push({ days, reason, date: new Date().toLocaleDateString() });
-        localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+        safeSaveConsignments();
         closeModal();
         showToast(`Item #${item.id} contract extended by +${days} days. New total: ${targetItem.contractDays} days.`);
         Router.rerender();
@@ -1875,8 +1972,8 @@ const ConsignmentPage = {
       <div class="field-group">
         <label class="field-label">Select Authentication Provider</label>
         <select class="field-input" id="auth-provider-select">
-          <option value="Entrupy" selected>Entrupy (AI Hardware Scanner)</option>
-          <option value="LegitGrail">LegitGrail (Manual & Footwear Specialist)</option>
+          <option value="Entrupy" selected>Entrupy</option>
+          <option value="LegitGrail">LegitGrail</option>
         </select>
       </div>
 
@@ -1900,7 +1997,7 @@ const ConsignmentPage = {
 
       <div class="modal-actions">
         <button class="btn-secondary" data-close-modal>Cancel</button>
-        <button class="btn-confirm" id="btn-confirm-auth-payment">Confirm Payment & Advance Queue</button>
+        <button class="btn-confirm" id="btn-confirm-auth-payment">Confirm</button>
       </div>
     `;
 
@@ -1930,7 +2027,7 @@ const ConsignmentPage = {
         targetItem.authFeeAmount = calc.fee;
         targetItem.status = 'Pending Authentication';
 
-        localStorage.setItem('consignments_data', JSON.stringify(DB.consignments));
+        safeSaveConsignments();
         closeModal();
         showToast(`Payment Confirmed (Ref #${refNo})! Item #${item.id} advanced to Authentication Queue.`);
         Router.rerender();
@@ -1957,7 +2054,7 @@ const ConsignmentPage = {
 
     const stages = [
       { num: 1, title: 'Intake & Agreement', desc: `Item received & Gov ID verified (${item.consignorName || 'Consignor'})`, done: stageIndex >= 1, current: stageIndex === 1 },
-      { num: 2, title: 'Authentication Service', desc: item.authentication === 'verified' ? 'Double-Authentication Verified Authentic' : 'In authentication queue (12-24h SLA)', done: stageIndex >= 2, current: stageIndex === 2 },
+      { num: 2, title: 'Authentication Service', desc: item.authentication === 'verified' ? 'Verified Authentic' : 'In authentication queue (12-24h SLA)', done: stageIndex >= 2, current: stageIndex === 2 },
       { num: 3, title: 'Photography & Quality', desc: (item.photoSet && item.photoSet.length >= 5) ? 'High-resolution 5-angle photo set complete' : 'Scheduled for studio photography', done: stageIndex >= 3, current: stageIndex === 3 },
       { num: 4, title: 'Listing & Publishing', desc: stageIndex >= 4 ? 'Live on Website, Showroom & Shopify' : 'Pending final pricing and publishing', done: stageIndex >= 4, current: stageIndex === 4 },
       { num: 5, title: 'Sale & Consignor Payout', desc: item.payoutStatus === 'sold' ? 'Sold! Payout settlement initiated (1-14 banking days)' : 'Available for purchase · Payout on sale', done: stageIndex >= 5, current: stageIndex === 5 }

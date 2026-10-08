@@ -15,7 +15,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const togglePasswordBtn = document.getElementById('login-toggle-password');
   const usernameInput = document.getElementById('login-username');
 
-  //Landing View Navigation
   document.getElementById('landing-enter-btn')?.addEventListener('click', () => {
     landingView.classList.add('hidden');
     loginView.classList.remove('hidden');
@@ -26,7 +25,6 @@ document.addEventListener('DOMContentLoaded', () => {
     landingView.classList.remove('hidden');
   });
 
-  //Password Toggle
   togglePasswordBtn.addEventListener('click', () => {
     const showing = passwordInput.type === 'text';
     passwordInput.type = showing ? 'password' : 'text';
@@ -35,7 +33,6 @@ document.addEventListener('DOMContentLoaded', () => {
     togglePasswordBtn.title = showing ? 'Show password' : 'Hide password';
   });
 
-  //Quick Role Login
   document.querySelectorAll('.role-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       const user = chip.dataset.user;
@@ -47,7 +44,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  //Login Form Submit
   loginForm.addEventListener('submit', (e) => {
     e.preventDefault();
     performLogin(usernameInput.value, passwordInput.value);
@@ -72,7 +68,6 @@ document.addEventListener('DOMContentLoaded', () => {
     enterApp();
   }
 
-  //Forgot Password Link
   document.getElementById('login-forgot-btn')?.addEventListener('click', () => {
     openModal({
       title: 'Reset Password',
@@ -95,7 +90,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // --- Logout Confirmation ---
   document.getElementById('logout-btn').addEventListener('click', () => {
     showLogoutModal();
   });
