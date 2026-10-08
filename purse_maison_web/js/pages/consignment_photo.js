@@ -86,7 +86,7 @@ Object.assign(ConsignmentFlow, {
         <div class="card-title" style="margin-bottom:12px;">Photography Queue (${queue.length})</div>
         ${this.queueTable(queue, this.selectedPhotoItem, [
           ['Item ID', (i) => `<strong>${escapeHtml(i.code)}</strong>`],
-          ['Item', (i) => `<div style="font-weight:600;">${escapeHtml(this.itemName(i))}</div><div class="cell-muted" style="font-size:11.5px;">${escapeHtml(i.category || '—')}</div>`],
+          ['Item', (i) => `<div style="font-weight:600;">${escapeHtml(this.itemName(i))}</div><div class="cell-muted" style="font-size:11.5px;">${escapeHtml(i.category || '—')}</div>${i.photoRevisionNote ? badge('Revision requested', 'danger') : ''}`],
           ['Photographer', (i) => (i.photographerId ? escapeHtml(this.staffName(i.photographerId)) + (i.photographerId === this.myId() ? ' (you)' : '') : '<span class="cell-muted">Unassigned</span>')],
           ['Shots', (i) => {
             const n = this.listingPhotoCount(i);
@@ -115,6 +115,8 @@ Object.assign(ConsignmentFlow, {
           </div>
           ${i.conditionNotes ? `<div style="font-size:12.5px; margin-bottom:14px;"><span class="cell-muted">Condition notes:</span> ${escapeHtml(i.conditionNotes)}</div>` : ''}
 
+          ${i.photoRevisionNote ? `<div style="background:#FEF2F2; border:1px solid #FCA5A5; border-radius:8px; padding:10px; font-size:12.5px; margin-bottom:12px;">
+            <strong style="color:var(--danger-red);">Returned by Design:</strong> ${escapeHtml(i.photoRevisionNote)}</div>` : ''}
           <h3 style="font-size:14px; margin:0 0 8px;">Listing Shots</h3>
           ${canShoot ? '' : '<p class="cell-muted" style="font-size:12px;">Take this item to upload photos.</p>'}
           ${this.renderListingPhotoGrid(i, canShoot)}

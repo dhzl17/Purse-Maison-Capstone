@@ -119,6 +119,7 @@ const ConsignmentFlow = {
       if (/serial_number/i.test(msg)) return 'Another item already has this serial number.';
       if (/microchip/i.test(msg)) return 'Another item already has this microchip number.';
       if (/barcode/i.test(msg)) return 'Another item already has this barcode.';
+      if (/one_primary_listing_photo/i.test(msg)) return 'Only one cover photo is allowed per item.';
       return 'This record already exists.';
     }
     if (/row-level security|permission denied/i.test(msg)) return 'Your role is not allowed to make this change.';

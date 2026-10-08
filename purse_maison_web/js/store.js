@@ -273,7 +273,8 @@ const DataStore = {
         .select(`id, item_code, brand, model, color, category, hardware, serial_number, microchip_number, date_code,
                  condition_notes, accessories_included, price, consignor_payout, current_stage, lead_status,
                  inquiry_channel, inquiry_notes, asking_price, agreed_payout, fulfillment_method, appointment_at,
-                 agreement_id, assigned_photographer_id, photos_approved, created_at, updated_at,
+                 agreement_id, assigned_photographer_id, photos_approved, photo_edit_checklist, photo_revision_note,
+                 price_approved, payout_confirmed, markup, created_at, updated_at,
                  consignor:consignors(id, full_name, phone, email, id_verified, id_type, id_photo_path, verified_at),
                  agreement:consignment_agreements(signed_at),
                  item_photos(photo_type, storage_path, uploaded_at),
@@ -282,7 +283,9 @@ const DataStore = {
                  authentication_records(id, provider, category, fee, payment_status, payment_reference, payment_confirmed_at,
                    service_started_at, sla_deadline, primary_authenticator_id, secondary_authenticator_id,
                    primary_result, secondary_result, final_result, certificate_url, certificate_uploaded_at),
-                 listings(inventory_status)`)
+                 listings(id, title, description, specifications, seo_title, seo_description, authenticity_footer,
+                          layaway_clause, sales_channels, inventory_status, published_at, submitted_at),
+                 manager_reviews(decision, return_reason, notes, reviewed_at)`)
         .order('created_at', { ascending: false })
         .limit(1000),
       sbClient.from('consignors').select('id, full_name, phone, email').order('full_name').limit(1000),
@@ -339,6 +342,13 @@ const DataStore = {
         negotiations: (r.price_negotiations || []).slice().sort((a, b) => new Date(b.logged_at) - new Date(a.logged_at)),
         auth: this.one(r.authentication_records) || null,
         listingStatus: listing ? listing.inventory_status : null,
+        listing: listing || null,
+        photoChecklist: r.photo_edit_checklist || [],
+        photoRevisionNote: r.photo_revision_note || '',
+        markup: r.markup == null ? null : Number(r.markup),
+        priceApproved: !!r.price_approved,
+        payoutConfirmed: !!r.payout_confirmed,
+        managerReviews: (r.manager_reviews || []).slice().sort((a, b) => new Date(b.reviewed_at) - new Date(a.reviewed_at)),
       };
     });
   },
