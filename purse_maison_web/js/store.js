@@ -10,6 +10,9 @@
  *   DB.salesSeries          monthly revenue per brand (imported history + system sales)
  *   DB.activeConsignedCount items still moving through the consignment pipeline
  *   DB.inquiryCount         number of client inquiries
+ *   DB.clientInquiries      client inquiries (Client Assignment page)
+ *   DB.salesAssociates      sales associates with their current workload
+ *   DB.assignmentActivity   recent assignment activity feed
  *   DB.salesForecasts       one row per brand from the latest ARIMA forecast
  *   DB.forecastRows         the monthly forecast values behind those rows
  *   DB.forecastMeta         when it ran, model accuracy, latest run status, skipped brands
@@ -22,6 +25,11 @@ const CLOSED_STAGES = ['closed_fake', 'closed_rejected'];
 const FINISHED_STAGES = ['closed_fake', 'closed_rejected', 'sold', 'archived'];
 const GROWTH_STABLE_BAND = 5;   // growth within +/-5% counts as "stable"
 const ALERT_GROWTH_PERCENT = 10; // growth beyond +/-10% raises an alert
+
+const INQUIRY_CHANNELS = {
+  walk_in: 'Walk-in', phone: 'Phone', email: 'Email', website: 'Website',
+  facebook: 'Facebook', instagram: 'Instagram', tiktok: 'TikTok', messenger: 'Messenger', whatsapp: 'WhatsApp',
+};
 
 const DataStore = {
   loadedAt: 0,
@@ -36,7 +44,7 @@ const DataStore = {
       await Promise.all([
         this._run('items', () => this.loadItems()),
         this._run('sales history', () => this.loadSalesSeries()),
-        this._run('inquiries', () => this.loadInquiryCount()),
+        this._run('clients', () => this.loadClients()),
       ]);
       // The forecast summary compares against sales history, so it loads after it.
       await this._run('forecast', () => this.loadForecast());
@@ -181,10 +189,80 @@ const DataStore = {
     }));
   },
 
-  async loadInquiryCount() {
-    const { count, error } = await sbClient.from('inquiries').select('id', { count: 'exact', head: true });
-    if (error) { DB.inquiryCount = 0; throw error; }
-    DB.inquiryCount = count || 0;
+  // ---------------------------------------------------------------- clients
+  async loadClients() {
+    const [inq, work, profiles, activity] = await Promise.all([
+      sbClient.from('inquiries')
+        .select('id, client_name, client_phone, client_email, client_role, is_vip, inquiry_channel, inquiry_status, transaction_result, assigned_associate_id, assigned_at, created_at')
+        .order('created_at', { ascending: true })
+        .limit(1000),
+      sbClient.from('associate_workload')
+        .select('associate_id, full_name, open_inquiries, open_consignments, status')
+        .limit(200),
+      sbClient.from('profiles').select('id, full_name').limit(500),
+      sbClient.from('assignment_activity')
+        .select('description, created_at')
+        .order('created_at', { ascending: false })
+        .limit(20),
+    ]);
+
+    if (inq.error) {
+      DB.clientInquiries = []; DB.salesAssociates = []; DB.assignmentActivity = []; DB.inquiryCount = 0;
+      throw inq.error;
+    }
+    DB.inquiryCount = inq.data.length;
+
+    const names = new Map();
+    if (!profiles.error) for (const p of profiles.data) names.set(p.id, p.full_name || '(unnamed)');
+    if (!work.error) for (const w of work.data) names.set(w.associate_id, w.full_name || names.get(w.associate_id) || '(unnamed)');
+
+    // Oldest inquiry is No. 1; the page sorts them as needed.
+    DB.clientInquiries = inq.data.map((r, idx) => ({
+      id: r.id,
+      no: idx + 1,
+      clientName: r.client_name,
+      phone: r.client_phone || '',
+      email: r.client_email || '',
+      isVip: !!r.is_vip,
+      clientType: r.inquiry_channel === 'walk_in' ? 'Walk-in' : 'Online',
+      clientRole: r.client_role === 'consignor' ? 'Consignor' : 'Buyer',
+      clientRoleValue: r.client_role,
+      inquiryStatus: r.inquiry_status,
+      inquirySource: INQUIRY_CHANNELS[r.inquiry_channel] || r.inquiry_channel,
+      channel: r.inquiry_channel,
+      transactionResult: r.transaction_result,
+      assignedId: r.assigned_associate_id,
+      assignedName: r.assigned_associate_id ? (names.get(r.assigned_associate_id) || '(unknown)') : '',
+      assignedAt: r.assigned_at,
+      createdAt: r.created_at,
+    }));
+
+    // Each associate, with the clients they are currently handling
+    DB.salesAssociates = work.error ? [] : work.data.map((w) => {
+      const open = DB.clientInquiries.filter((i) => i.assignedId === w.associate_id && i.inquiryStatus === 'assigned');
+      let currentClient = '-';
+      if (open.length === 1) currentClient = open[0].clientName;
+      else if (open.length > 1) currentClient = `${open[0].clientName} +${open.length - 1} more`;
+      return {
+        id: w.associate_id,
+        associateName: w.full_name || names.get(w.associate_id) || '(unnamed)',
+        status: w.status,
+        openInquiries: w.open_inquiries || 0,
+        openConsignments: w.open_consignments || 0,
+        currentClient,
+      };
+    }).sort((a, b) => a.associateName.localeCompare(b.associateName));
+
+    // Activity feed: consignment assignments (logged by the database) + inquiry assignments
+    const feed = [];
+    if (!activity.error) for (const a of activity.data) feed.push({ description: a.description, at: a.created_at });
+    for (const i of DB.clientInquiries) {
+      if (i.assignedId && i.assignedAt) {
+        feed.push({ description: `Inquiry from "${i.clientName}" assigned to Associate "${i.assignedName}"`, at: i.assignedAt });
+      }
+    }
+    feed.sort((a, b) => new Date(b.at) - new Date(a.at));
+    DB.assignmentActivity = feed.slice(0, 12).map((f, i) => ({ id: `aa-${i}`, description: f.description, timestamp: this.formatDateTime(f.at) }));
   },
 
   // ---------------------------------------------------------------- forecast
