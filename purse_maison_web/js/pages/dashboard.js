@@ -1,22 +1,21 @@
 /**
- * Dashboard page — mirrors screens/dashboard_page.dart. Every KPI and
- * chart here is computed live from DB.* arrays, nothing hardcoded.
+ * Dashboard page. Every KPI and chart is computed from DB.* arrays, which
+ * js/store.js fills from Supabase after login.
  */
 
 const DashboardPage = {
   computeStats() {
     const inventory = DB.inventory;
-    const consignments = DB.consignments;
-    const transactions = DB.salesTransactions;
-    const inquiries = DB.clientInquiries;
+    const transactions = DB.salesTransactions; // verified sales in the system (used for display duration)
+    const salesSeries = DB.salesSeries;         // monthly revenue incl. imported history (totals and charts)
 
     const itemsSold = inventory.filter((i) => i.status === 'sold').length;
-    const activeConsignedItems = consignments.filter((c) => c.payoutStatus !== 'cancelled').length;
+    const activeConsignedItems = DB.activeConsignedCount;
 
     const now = new Date();
     const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     let thisMonthTotal = 0, lastMonthTotal = 0;
-    for (const t of transactions) {
+    for (const t of salesSeries) {
       if (t.date.getFullYear() === now.getFullYear() && t.date.getMonth() === now.getMonth()) thisMonthTotal += t.amount;
       else if (t.date.getFullYear() === lastMonthDate.getFullYear() && t.date.getMonth() === lastMonthDate.getMonth()) lastMonthTotal += t.amount;
     }
@@ -40,7 +39,7 @@ const DashboardPage = {
 
     const months = lastNMonths(6);
     const monthLabels = months.map((m) => m.label);
-    const monthlyTotals = monthlySalesTotals(transactions, months);
+    const monthlyTotals = monthlySalesTotals(salesSeries, months);
 
     const statusCounts = {
       Available: inventory.filter((i) => i.status === 'available').length,
@@ -49,7 +48,7 @@ const DashboardPage = {
       Sold: itemsSold,
     };
 
-    return { itemsSold, activeConsignedItems, thisMonthTotal, growthPercent, avgDisplayDuration, turnoverRate, totalInquiries: inquiries.length, fastMovingCount, slowMovingCount, monthLabels, monthlyTotals, statusCounts };
+    return { itemsSold, activeConsignedItems, thisMonthTotal, growthPercent, avgDisplayDuration, turnoverRate, totalInquiries: DB.inquiryCount, fastMovingCount, slowMovingCount, monthLabels, monthlyTotals, statusCounts };
   },
 
   buildInsights(stats) {
@@ -136,6 +135,7 @@ const DashboardPage = {
 
   afterRender() {
     const stats = this.computeStats();
+    DataStore.refreshIfStale();
 
     makeLineChart('chart-sales-overview', stats.monthLabels, [{
       data: stats.monthlyTotals, borderColor: '#3247C5', backgroundColor: 'rgba(50,71,197,0.12)',

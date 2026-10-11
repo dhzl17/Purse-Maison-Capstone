@@ -1,27 +1,34 @@
 /**
- * Client Assignment page — mirrors screens/client_assignment_page.dart +
- * widgets/client_assignment_tables.dart + widgets/client_assignment_panels.dart.
+ * Client Assignment page — connected to Supabase.
+ *
+ * Inquiries are saved to the `inquiries` table. When a new inquiry has no associate chosen, the database
+ * assigns the sales associate with the lowest current workload (open inquiries + open consignments).
+ * Staff can also pick an associate by hand. Sales associates themselves are created in Settings.
+ * Inquiries cannot be deleted, and a resolved inquiry cannot be reopened (database rules).
  */
+
+const CLIENT_WRITE_ROLES = ['consignmentTeam', 'salesAssociate', 'manager', 'superAdmin'];
 
 const ClientsPage = {
   searchKeyword: '',
   sortBy: 'recently',
 
+  canWrite() {
+    const role = Session.currentUser && Session.currentUser.role;
+    return CLIENT_WRITE_ROLES.includes(role);
+  },
+
   inquiryStatusBadge(status) {
-    const map = { newInquiry: ['New', 'info'], closed: ['Closed', 'danger'], followedUp: ['Followed-up', 'warning'], reserved: ['Reserved', 'success'] };
+    const map = { pending: ['Pending', 'info'], assigned: ['Assigned', 'warning'], resolved: ['Resolved', 'success'] };
     const [label, tone] = map[status] || ['Unknown', 'info'];
     return badge(label, tone);
   },
   transactionResultCell(result) {
-    if (result === 'none') return '<span class="cell-muted">-</span>';
+    if (result === 'none' || !result) return '<span class="cell-muted">-</span>';
     return result === 'purchased' ? badge('Purchased', 'success') : badge('No Purchase', 'danger');
   },
   associateStatusBadge(status) {
     return status === 'assigned' ? badge('Assigned', 'warning') : badge('Available', 'success');
-  },
-
-  nextInquiryNo() {
-    return DB.clientInquiries.reduce((max, i) => Math.max(max, i.no), 0) + 1;
   },
 
   filterAndSortInquiries(items) {
@@ -32,7 +39,8 @@ const ClientsPage = {
         String(i.clientName || '').toLowerCase().includes(kw) ||
         String(i.clientType || '').toLowerCase().includes(kw) ||
         String(i.clientRole || '').toLowerCase().includes(kw) ||
-        String(i.inquirySource || '').toLowerCase().includes(kw)
+        String(i.inquirySource || '').toLowerCase().includes(kw) ||
+        String(i.assignedName || '').toLowerCase().includes(kw)
       );
     }
     if (this.sortBy === 'alphabetical') list.sort((a, b) => (a.clientName || '').localeCompare(b.clientName || ''));
@@ -45,13 +53,14 @@ const ClientsPage = {
     const inquiries = this.filterAndSortInquiries(DB.clientInquiries);
     const associates = DB.salesAssociates;
     const activity = DB.assignmentActivity;
+    const canWrite = this.canWrite();
 
     return `
       <h1 class="page-title">Client Assignment</h1>
 
       <div class="filter-toolbar-row" style="margin-bottom:14px;">
         <div class="filter-controls-group">
-          ${renderUniversalSearchBar('clients-search-input', 'Search by Name, Type, Source...')}
+          ${renderUniversalSearchBar('clients-search-input', 'Search by Name, Type, Source, Associate...')}
           <select class="sort-select" id="clients-sort-select">
             <option value="recently" ${this.sortBy === 'recently' ? 'selected' : ''}>Sort: Recently Added</option>
             <option value="oldest" ${this.sortBy === 'oldest' ? 'selected' : ''}>Sort: Oldest First</option>
@@ -64,9 +73,9 @@ const ClientsPage = {
         <div class="chart-card col-wide">
           <div class="toolbar-row" style="margin-bottom:12px;">
             <span class="card-title">Client Inquiries</span>
-            <button class="btn-add" id="btn-add-inquiry">+ Add Inquiry</button>
+            ${canWrite ? '<button class="btn-add" id="btn-add-inquiry">+ Add Inquiry</button>' : ''}
           </div>
-<div class="table-scroll">
+          <div class="table-scroll">
             <table class="data-table">
               <thead>
                 <tr>
@@ -76,29 +85,28 @@ const ClientsPage = {
                   <th style="text-align: center;">Role</th>
                   <th style="text-align: center;">Status</th>
                   <th style="text-align: center;">Source</th>
+                  <th style="text-align: center;">Assigned To</th>
                   <th style="text-align: center;">Result</th>
-                  <th style="text-align: center;">Actions</th>
+                  ${canWrite ? '<th style="text-align: center;">Actions</th>' : ''}
                 </tr>
               </thead>
               <tbody>
-                ${inquiries.length === 0 ? `<tr><td colspan="8" class="cell-center cell-muted" style="padding:18px; text-align: center;">No inquiries match your search.</td></tr>` :
+                ${inquiries.length === 0 ? `<tr><td colspan="${canWrite ? 9 : 8}" class="cell-center cell-muted" style="padding:18px; text-align: center;">${DB.clientInquiries.length === 0 ? 'No inquiries yet.' : 'No inquiries match your search.'}</td></tr>` :
                   inquiries.map((i) => `
                   <tr style="text-align: center; vertical-align: middle;">
                     <td style="text-align: center; vertical-align: middle;">${i.no}</td>
-                    <td class="cell-bold" style="text-align: center; vertical-align: middle;">${escapeHtml(i.clientName)}</td>
+                    <td class="cell-bold" style="text-align: center; vertical-align: middle;">${escapeHtml(i.clientName)}${i.isVip ? ' <span title="VIP client" style="color:#b8860b;">★</span>' : ''}</td>
                     <td class="cell-center" style="text-align: center; vertical-align: middle; white-space: nowrap;">${escapeHtml(i.clientType)}</td>
                     <td class="cell-center" style="text-align: center; vertical-align: middle;">${escapeHtml(i.clientRole)}</td>
                     <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.inquiryStatusBadge(i.inquiryStatus)}</td>
                     <td class="cell-center" style="text-align: center; vertical-align: middle;">${escapeHtml(i.inquirySource)}</td>
+                    <td class="${i.assignedName ? '' : 'cell-muted'}" style="text-align: center; vertical-align: middle; white-space: nowrap;">${i.assignedName ? escapeHtml(i.assignedName) : 'Unassigned'}</td>
                     <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.transactionResultCell(i.transactionResult)}</td>
-                    <td style="text-align: center; vertical-align: middle;"><div class="row-actions" style="justify-content: center;">
-                        <button class="icon-btn" data-edit-inquiry="${i.id}" title="Edit">
+                    ${canWrite ? `<td style="text-align: center; vertical-align: middle;"><div class="row-actions" style="justify-content: center;">
+                        <button class="icon-btn" data-edit-inquiry="${escapeHtml(i.id)}" title="Edit">
                           <i class="fa-solid fa-pen"></i>
                         </button>
-                        <button class="icon-btn danger" data-delete-inquiry="${i.id}" title="Delete">
-                          <i class="fa-solid fa-trash-can"></i>
-                        </button>
-                    </div></td>
+                    </div></td>` : ''}
                   </tr>`).join('')}
               </tbody>
             </table>
@@ -108,7 +116,6 @@ const ClientsPage = {
         <div class="chart-card col-narrow">
           <div class="toolbar-row" style="margin-bottom:12px;">
             <span class="card-title">Sales Associates</span>
-            <button class="btn-add" id="btn-add-associate">+ Add</button>
           </div>
           <div class="table-scroll">
             <table class="data-table">
@@ -117,36 +124,31 @@ const ClientsPage = {
                   <th style="text-align: center;">Name</th>
                   <th style="text-align: center;">Status</th>
                   <th style="text-align: center;">Client</th>
-                  <th style="text-align: center;">Actions</th>
+                  <th style="text-align: center;" title="Open inquiries / open consignments">Workload</th>
                 </tr>
               </thead>
               <tbody>
-                ${associates.map((a) => `
+                ${associates.length === 0 ? '<tr><td colspan="4" class="cell-center cell-muted" style="padding:18px; text-align: center;">No active sales associates.</td></tr>' :
+                  associates.map((a) => `
                   <tr style="text-align: center; vertical-align: middle;">
                     <td class="cell-bold" style="text-align: center; vertical-align: middle; white-space: nowrap;">${escapeHtml(a.associateName)}</td>
                     <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.associateStatusBadge(a.status)}</td>
                     <td class="${a.currentClient === '-' ? 'cell-muted' : ''}" style="text-align: center; vertical-align: middle;">${escapeHtml(a.currentClient)}</td>
-                    <td style="text-align: center; vertical-align: middle;">
-                      <div class="row-actions">
-                        <button class="icon-btn" data-edit-assoc="${a.id}" title="Edit">
-                          <i class="fa-solid fa-pen"></i>
-                        </button>
-                        <button class="icon-btn danger" data-delete-assoc="${a.id}" title="Delete">
-                          <i class="fa-solid fa-trash-can"></i>
-                        </button>
-                      </div>
-                    </td>
+                    <td style="text-align: center; vertical-align: middle; white-space: nowrap;">${a.openInquiries} inq · ${a.openConsignments} cons</td>
                   </tr>`).join('')}
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
 
       <div class="section-grid">
+        ${canWrite ? `
         <div class="card col-narrow">
           <div class="card-title" style="margin-bottom:16px;">Quick Actions</div>
           <button class="quick-action-btn" id="btn-quick-walkin">+ Add Walk In Client</button>
           <button class="quick-action-btn" id="btn-quick-online">+ Add Online Inquiry</button>
-        </div>
+        </div>` : ''}
         <div class="chart-card col-wide">
           <div class="card-title" style="margin-bottom:14px;">Recent Assignment Activity</div>
           ${activity.map((a) => `
@@ -160,6 +162,8 @@ const ClientsPage = {
   },
 
   afterRender() {
+    DataStore.refreshIfStale();
+
     const searchInput = document.getElementById('clients-search-input');
     if (searchInput) {
       searchInput.value = this.searchKeyword;
@@ -179,58 +183,80 @@ const ClientsPage = {
       });
     }
 
-    document.getElementById('btn-add-inquiry').addEventListener('click', () => this.openInquiryForm(null));
-    document.getElementById('btn-add-associate').addEventListener('click', () => this.openAssociateForm(null));
-    document.getElementById('btn-quick-walkin').addEventListener('click', () => this.openInquiryForm(null, 'Walk-in'));
-    document.getElementById('btn-quick-online').addEventListener('click', () => this.openInquiryForm(null, 'Online'));
+    if (!this.canWrite()) return;
+
+    const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+    on('btn-add-inquiry', () => this.openInquiryForm(null));
+    on('btn-quick-walkin', () => this.openInquiryForm(null, 'walk_in'));
+    on('btn-quick-online', () => this.openInquiryForm(null, 'website'));
 
     document.querySelectorAll('[data-edit-inquiry]').forEach((btn) => {
-      btn.addEventListener('click', () => this.openInquiryForm(DB.clientInquiries.find((i) => i.id === btn.dataset.editInquiry)));
-    });
-    document.querySelectorAll('[data-delete-inquiry]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const item = DB.clientInquiries.find((i) => i.id === btn.dataset.deleteInquiry);
-        confirmDelete(item.clientName, () => {
-          DB.clientInquiries = DB.clientInquiries.filter((i) => i.id !== item.id);
-          showToast('Inquiry deleted.');
-          Router.rerender();
-        });
-      });
-    });
-    document.querySelectorAll('[data-edit-assoc]').forEach((btn) => {
-      btn.addEventListener('click', () => this.openAssociateForm(DB.salesAssociates.find((a) => a.id === btn.dataset.editAssoc)));
-    });
-    document.querySelectorAll('[data-delete-assoc]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const item = DB.salesAssociates.find((a) => a.id === btn.dataset.deleteAssoc);
-        confirmDelete(item.associateName, () => {
-          DB.salesAssociates = DB.salesAssociates.filter((a) => a.id !== item.id);
-          showToast('Associate removed.');
-          Router.rerender();
-        });
+        const item = DB.clientInquiries.find((i) => i.id === btn.dataset.editInquiry);
+        if (item) this.openInquiryForm(item);
       });
     });
   },
 
-
-  openInquiryForm(existing, initialClientType) {
+  openInquiryForm(existing, initialChannel) {
     const isEdit = !!existing;
+    const resolved = isEdit && existing.inquiryStatus === 'resolved';
+    const sel = (cond) => (cond ? 'selected' : '');
+    const channelValue = existing?.channel || initialChannel || 'walk_in';
+
+    const associateOptions = [];
+    if (!isEdit) associateOptions.push(['', 'Automatic (least busy associate)']);
+    else if (!existing.assignedId) associateOptions.push(['', 'Unassigned']);
+    const known = new Set(DB.salesAssociates.map((a) => a.id));
+    if (isEdit && existing.assignedId && !known.has(existing.assignedId)) {
+      associateOptions.push([existing.assignedId, existing.assignedName]);
+    }
+    for (const a of DB.salesAssociates) {
+      associateOptions.push([a.id, `${a.associateName} (${a.openInquiries + a.openConsignments} open)`]);
+    }
+    const currentAssignee = existing?.assignedId || '';
+
+    const statusOptions = [];
+    if (isEdit) {
+      if (existing.inquiryStatus === 'pending') statusOptions.push(['pending', 'Pending']);
+      statusOptions.push(['assigned', 'Assigned'], ['resolved', 'Resolved']);
+    }
+
     const html = `
       <form id="inquiry-form">
         <div class="field-group"><label class="field-label">Client Name</label><input class="field-input" name="clientName" required value="${escapeHtml(existing?.clientName || '')}"></div>
-        <div class="field-group"><label class="field-label">Client Type</label><input class="field-input" name="clientType" required value="${escapeHtml(existing?.clientType || initialClientType || 'Walk-in')}"></div>
-        <div class="field-group"><label class="field-label">Client Role</label><input class="field-input" name="clientRole" required value="${escapeHtml(existing?.clientRole || 'Buyer')}"></div>
-        <div class="field-group"><label class="field-label">Inquiry Status</label>
-          <select class="field-input" name="inquiryStatus">
-            ${[['newInquiry', 'New'], ['closed', 'Closed'], ['followedUp', 'Followed-up'], ['reserved', 'Reserved']].map(([v, l]) => `<option value="${v}" ${existing?.inquiryStatus === v ? 'selected' : ''}>${l}</option>`).join('')}
+        <div class="field-group"><label class="field-label">Phone (optional)</label><input class="field-input" name="phone" value="${escapeHtml(existing?.phone || '')}"></div>
+        <div class="field-group"><label class="field-label">Email (optional)</label><input class="field-input" name="email" type="email" value="${escapeHtml(existing?.email || '')}"></div>
+        <div class="field-group"><label class="field-label">Client Role</label>
+          <select class="field-input" name="clientRole">
+            <option value="buyer" ${sel((existing?.clientRoleValue || 'buyer') === 'buyer')}>Buyer</option>
+            <option value="consignor" ${sel(existing?.clientRoleValue === 'consignor')}>Consignor</option>
           </select>
         </div>
-        <div class="field-group"><label class="field-label">Inquiry Source</label><input class="field-input" name="inquirySource" required value="${escapeHtml(existing?.inquirySource || '')}"></div>
+        <div class="field-group"><label class="field-label">Inquiry Source</label>
+          <select class="field-input" name="channel">
+            ${Object.entries(INQUIRY_CHANNELS).map(([v, l]) => `<option value="${v}" ${sel(channelValue === v)}>${l}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field-group"><label class="field-label"><input type="checkbox" name="isVip" ${existing?.isVip ? 'checked' : ''}> VIP client</label></div>
+        <div class="field-group"><label class="field-label">Assigned Associate</label>
+          <select class="field-input" name="associate" ${resolved ? 'disabled' : ''}>
+            ${associateOptions.map(([v, l]) => `<option value="${escapeHtml(v)}" ${sel(v === currentAssignee)}>${escapeHtml(l)}</option>`).join('')}
+          </select>
+        </div>
+        ${isEdit ? `
+        <div class="field-group"><label class="field-label">Inquiry Status</label>
+          <select class="field-input" name="inquiryStatus" ${resolved ? 'disabled' : ''}>
+            ${resolved ? '<option value="resolved" selected>Resolved</option>' :
+              statusOptions.map(([v, l]) => `<option value="${v}" ${sel(existing.inquiryStatus === v)}>${l}</option>`).join('')}
+          </select>
+          ${resolved ? '<small class="cell-muted">A resolved inquiry cannot be reopened.</small>' : ''}
+        </div>
         <div class="field-group"><label class="field-label">Transaction Result</label>
           <select class="field-input" name="transactionResult">
-            ${[['none', 'None'], ['noPurchase', 'No Purchase'], ['purchased', 'Purchased']].map(([v, l]) => `<option value="${v}" ${existing?.transactionResult === v ? 'selected' : ''}>${l}</option>`).join('')}
+            ${[['none', 'None'], ['no_purchase', 'No Purchase'], ['purchased', 'Purchased']].map(([v, l]) => `<option value="${v}" ${sel(existing.transactionResult === v)}>${l}</option>`).join('')}
           </select>
-        </div>
+        </div>` : ''}
         <div class="modal-actions">
           <button type="button" class="btn-secondary" data-close-modal>Cancel</button>
           <button type="submit" class="btn-confirm">${isEdit ? 'Save Changes' : 'Add Inquiry'}</button>
@@ -238,63 +264,71 @@ const ClientsPage = {
       </form>`;
     const overlay = openModal({ title: isEdit ? 'Edit Client Inquiry' : 'Add Client Inquiry', bodyHtml: html });
     overlay.querySelector('[data-close-modal]').addEventListener('click', closeModal);
-    overlay.querySelector('#inquiry-form').addEventListener('submit', (e) => {
+    overlay.querySelector('#inquiry-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const fd = new FormData(e.target);
-      const record = {
-        id: existing?.id || nextId('ci'), no: existing?.no || this.nextInquiryNo(),
-        clientName: fd.get('clientName').trim(), clientType: fd.get('clientType').trim(),
-        clientRole: fd.get('clientRole').trim(), inquiryStatus: fd.get('inquiryStatus'),
-        inquirySource: fd.get('inquirySource').trim(), transactionResult: fd.get('transactionResult'),
-      };
-      if (isEdit) {
-        const idx = DB.clientInquiries.findIndex((i) => i.id === record.id);
-        DB.clientInquiries[idx] = record;
+      const form = e.target;
+      const submit = form.querySelector('button[type="submit"]');
+      submit.disabled = true;
+      const ok = await this.saveInquiry(existing, new FormData(form));
+      if (ok) {
+        closeModal();
       } else {
-        DB.clientInquiries.push(record);
+        submit.disabled = false;
       }
-      closeModal();
-      showToast(isEdit ? 'Inquiry updated.' : 'Inquiry added.');
-      Router.rerender();
     });
   },
 
-  openAssociateForm(existing) {
-    const isEdit = !!existing;
-    const html = `
-      <form id="associate-form">
-        <div class="field-group"><label class="field-label">Associate Name</label><input class="field-input" name="associateName" required value="${escapeHtml(existing?.associateName || '')}"></div>
-        <div class="field-group"><label class="field-label">Status</label>
-          <select class="field-input" name="status">
-            <option value="assigned" ${existing?.status === 'assigned' ? 'selected' : ''}>Assigned</option>
-            <option value="available" ${existing?.status === 'available' ? 'selected' : ''}>Available</option>
-          </select>
-        </div>
-        <div class="field-group"><label class="field-label">Current Client (leave blank if none)</label><input class="field-input" name="currentClient" value="${escapeHtml(existing?.currentClient === '-' ? '' : (existing?.currentClient || ''))}"></div>
-        <div class="modal-actions">
-          <button type="button" class="btn-secondary" data-close-modal>Cancel</button>
-          <button type="submit" class="btn-confirm">${isEdit ? 'Save Changes' : 'Add Associate'}</button>
-        </div>
-      </form>`;
-    const overlay = openModal({ title: isEdit ? 'Edit Sales Associate' : 'Add Sales Associate', bodyHtml: html });
-    overlay.querySelector('[data-close-modal]').addEventListener('click', closeModal);
-    overlay.querySelector('#associate-form').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const fd = new FormData(e.target);
-      const client = fd.get('currentClient').trim();
-      const record = {
-        id: existing?.id || nextId('sa'), associateName: fd.get('associateName').trim(),
-        status: fd.get('status'), currentClient: client === '' ? '-' : client,
-      };
-      if (isEdit) {
-        const idx = DB.salesAssociates.findIndex((a) => a.id === record.id);
-        DB.salesAssociates[idx] = record;
+  /** Saves a new or edited inquiry. Returns true on success. */
+  async saveInquiry(existing, fd) {
+    const text = (k) => String(fd.get(k) || '').trim();
+    const name = text('clientName');
+    if (!name) { showToast('Please enter the client name.'); return false; }
+
+    try {
+      if (!existing) {
+        const row = {
+          client_name: name,
+          client_phone: text('phone') || null,
+          client_email: text('email') || null,
+          client_role: text('clientRole') || 'buyer',
+          inquiry_channel: text('channel') || 'walk_in',
+          is_vip: fd.get('isVip') === 'on',
+          created_by: Session.currentUser.uid,
+        };
+        if (text('associate')) row.assigned_associate_id = text('associate');
+        const { error } = await sbClient.from('inquiries').insert(row);
+        if (error) throw error;
       } else {
-        DB.salesAssociates.push(record);
+        const changes = {};
+        const setIf = (col, val, old) => { if (val !== old) changes[col] = val; };
+        setIf('client_name', name, existing.clientName);
+        setIf('client_phone', text('phone') || null, existing.phone || null);
+        setIf('client_email', text('email') || null, existing.email || null);
+        setIf('client_role', text('clientRole'), existing.clientRoleValue);
+        setIf('inquiry_channel', text('channel'), existing.channel);
+        setIf('is_vip', fd.get('isVip') === 'on', existing.isVip);
+        setIf('transaction_result', text('transactionResult') || existing.transactionResult, existing.transactionResult);
+        if (existing.inquiryStatus !== 'resolved') {
+          const assignee = text('associate');
+          if (assignee && assignee !== (existing.assignedId || '')) changes.assigned_associate_id = assignee;
+          const status = text('inquiryStatus');
+          if (status && status !== existing.inquiryStatus) changes.inquiry_status = status;
+        }
+        if (Object.keys(changes).length === 0) { showToast('No changes to save.'); return true; }
+
+        const { data, error } = await sbClient.from('inquiries').update(changes).eq('id', existing.id).select('id');
+        if (error) throw error;
+        if (!data || data.length === 0) throw new Error('You do not have permission to change this inquiry.');
       }
-      closeModal();
-      showToast(isEdit ? 'Associate updated.' : 'Associate added.');
-      Router.rerender();
-    });
+    } catch (err) {
+      console.error('Saving inquiry failed:', err);
+      showToast(`Could not save the inquiry: ${err.message || 'unknown error'}`);
+      return false;
+    }
+
+    showToast(existing ? 'Inquiry updated.' : 'Inquiry added.');
+    try { await DataStore.loadClients(); } catch (err) { console.error(err); showToast('Saved, but the list could not be refreshed. Reload the page.'); }
+    Router.rerender();
+    return true;
   },
 };

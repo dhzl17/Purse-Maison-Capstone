@@ -177,6 +177,8 @@ const ConsignmentPage = {
   },
 
   render(route = 'consignment-overview') {
+    // Overview, Pre-Intake and Intake are connected to Supabase in consignment_intake.js
+    if (ConsignmentFlow.handles(route)) return ConsignmentFlow.render(route);
     switch (route) {
       case 'consignment-preintake':
         return this.renderPreIntakeView();
@@ -967,6 +969,7 @@ renderAuthenticationView() {
      EVENT HANDLERS (afterRender)
      ========================================================================== */
   afterRender(route = 'consignment-overview') {
+    if (ConsignmentFlow.handles(route)) return ConsignmentFlow.afterRender(route);
     if (route === 'consignment-preintake') {
       document.querySelectorAll('[data-preintake-select]').forEach(btn => {
         btn.addEventListener('click', (e) => {
