@@ -518,7 +518,7 @@ renderAuthenticationView() {
                           Paid
                         </button>
                       ` : `
-                        <button class="btn-confirm" data-auth-pay="${item.id}" data-item-id="${item.id}" style="padding:4px 8px; font-size:11px; background:var(--green);">
+                        <button class="btn-confirm" data-auth-pay="${item.id}" data-item-id="${item.id}" style="padding:4px 8px; font-size:11px; border-color:var(--green); color:var(--green);">
                           Pay Fee
                         </button>
                       `}

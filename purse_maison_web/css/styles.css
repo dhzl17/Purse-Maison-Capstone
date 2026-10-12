@@ -482,15 +482,16 @@ table.data-table tbody tr:hover { background: #FAFAF7; }
   align-items: center;
   gap: 6px;
   padding: 10px 16px;
-  border-radius: 8px;
-  border: 1px solid var(--card-navy-dark);
-  background: transparent;
+  border-radius: 10px;
+  border: 1.5px solid var(--card-navy-dark);
+  background: #fff;
   color: var(--card-navy-dark);
-  font-weight: 600;
+  font-weight: 700;
   font-size: 13.5px;
   white-space: nowrap;
+  transition: background .15s, color .15s;
 }
-.btn-add:hover { background: var(--chip-bg); }
+.btn-add:hover { background: var(--card-navy-dark); color: #fff; }
 
 .pagination { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 14px 0; }
 .pagination button {
@@ -578,28 +579,45 @@ table.data-table tbody tr:hover { background: #FAFAF7; }
 .modal-close:hover { color: var(--text-dark); }
 .modal-body p { font-size: 13.5px; line-height: 1.5; color: var(--text-dark); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
-.btn-secondary {
-  padding: 11px 18px;
-  border-radius: 8px;
-  border: none;
-  background: transparent;
-  color: var(--text-dark);
-  font-weight: 600;
-  font-size: 13.5px;
-}
-.btn-secondary:hover { background: var(--chip-bg); }
+/* Outlined action buttons: navy border + navy text on a light background */
+.btn-secondary,
 .btn-confirm {
-  padding: 11px 20px;
-  border-radius: 8px;
-  border: none;
-  background: var(--card-navy-dark);
-  color: #fff;
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1.5px solid var(--card-navy-dark);
+  background: #fff;
+  color: var(--card-navy-dark);
   font-weight: 700;
   font-size: 13.5px;
+  transition: background .15s, color .15s;
 }
-.btn-confirm:hover { opacity: .9; }
-.btn-danger { background: var(--danger-red); }
+.btn-secondary:hover:not(:disabled),
+.btn-confirm:hover:not(:disabled) { background: var(--card-navy-dark); color: #fff; }
+.btn-danger { border-color: var(--danger-red); color: var(--danger-red); }
+.btn-danger:hover:not(:disabled) { background: var(--danger-red); color: #fff; }
 
+/* File inputs: crisp outline + matching outlined "Choose File" button */
+.field-input[type="file"] {
+  padding: 8px 10px;
+  border: 1.5px solid var(--card-navy-dark);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.field-input[type="file"]::file-selector-button {
+  margin-right: 10px;
+  padding: 6px 12px;
+  border: 1.5px solid var(--card-navy-dark);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--card-navy-dark);
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.field-input[type="file"]::file-selector-button:hover { background: var(--card-navy-dark); color: #fff; }
 select.field-input { appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%237A7A88'/></svg>"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 32px; }
 
 .credential-row { display: flex; gap: 10px; margin-bottom: 8px; font-size: 13.5px; }
