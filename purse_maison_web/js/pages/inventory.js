@@ -91,7 +91,6 @@ const InventoryPage = {
 
     return `
       <h1 class="page-title">Inventory Management</h1>
-      <p class="cell-muted" style="margin:-6px 0 16px;font-size:12.5px;">Items appear here once they are published, and stay until sold or returned to the consignor.</p>
 
       <div class="stat-grid">
         <div class="stat-card"><div class="stat-title">Total Items</div><div class="stat-value-row"><span class="stat-value">${total}</span></div></div>

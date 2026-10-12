@@ -50,10 +50,10 @@ const ID_TYPES = {
   passport: 'Passport', drivers_license: "Driver's License", umid: 'UMID', prc_id: 'PRC ID', philsys_id: 'PhilSys National ID',
 };
 const INTAKE_PHOTO_TYPES = {
-  front: 'Front', back: 'Back', side_left: 'Left side', side_right: 'Right side', underside: 'Bottom / underside',
+  front: 'Front', back: 'Back', side_left: 'Left side', side_right: 'Right side', underside: 'Bottom',
   inside: 'Inside', serial_number: 'Serial number', date_code: 'Date code', hardware: 'Hardware', accessories: 'Accessories',
 };
-const OPTIONAL_INTAKE_PHOTOS = { microchip: 'Microchip (if present)' };
+const OPTIONAL_INTAKE_PHOTOS = { microchip: 'Microchip' };
 const ACCESSORY_OPTIONS = ['Dust bag', 'Box', 'Lock', 'Keys', 'Strap', 'Receipt'];
 const ITEM_CATEGORIES = ['Handbag', 'Shoulder Bag', 'Tote', 'Crossbody', 'Backpack', 'Clutch', 'Small Leather Goods', 'Wallet', 'Shoes', 'Belt', 'Accessory'];
 const FEE_LABELS = {
@@ -394,7 +394,6 @@ const ConsignmentFlow = {
 
     return `
       <h1 class="page-title" style="margin-bottom:4px;">Inquiries & Pre-Intake</h1>
-      <p class="cell-muted" style="margin:0 0 16px;">Stages 1–7: inquiry, lead qualification, initial photos, negotiation, approval and scheduling.</p>
 
       ${editable ? this.renderInquiryForm() : ''}
 
@@ -426,7 +425,7 @@ const ConsignmentFlow = {
           </datalist>
           <div class="section-grid">
             <div class="field-group col-wide">
-              <label class="field-label">Consignor (type to search existing, or enter a new name)</label>
+              <label class="field-label">Consignor Name</label>
               <input class="field-input" name="consignor" list="cons-consignor-list" required placeholder="e.g. Maria Santos" autocomplete="off">
             </div>
             <div class="field-group col-wide">
@@ -437,8 +436,8 @@ const ConsignmentFlow = {
             </div>
           </div>
           <div class="section-grid">
-            <div class="field-group col-wide"><label class="field-label">Phone (new consignor)</label><input class="field-input" name="phone" placeholder="e.g. 0917 123 4567"></div>
-            <div class="field-group col-wide"><label class="field-label">Email (new consignor)</label><input class="field-input" name="email" type="email" placeholder="for the consignor portal"></div>
+            <div class="field-group col-wide"><label class="field-label">Phone</label><input class="field-input" name="phone" placeholder="e.g. 0917 123 4567"></div>
+            <div class="field-group col-wide"><label class="field-label">Email</label><input class="field-input" name="email" type="email" placeholder="e.g. superadmin@gmail.com"></div>
           </div>
           <div class="section-grid">
             <div class="field-group col-wide"><label class="field-label">Brand</label><input class="field-input" name="brand" required placeholder="e.g. Chanel"></div>
@@ -452,7 +451,7 @@ const ConsignmentFlow = {
             <label class="field-label">Internal Notes</label>
             <textarea class="field-input" name="notes" rows="2" placeholder="e.g. Caviar leather, light corner wear"></textarea>
           </div>
-          <button type="submit" class="btn-confirm">Create Inquiry</button>
+          <button type="submit" class="btn-confirm">Create</button>
         </form>
       </div>`;
   },
@@ -465,10 +464,10 @@ const ConsignmentFlow = {
     const dis = editable ? '' : 'disabled';
     const canLead = PRE_INTAKE_STAGES.includes(i.stage);
     const next = {
-      initial_photo_submission: ['price_negotiation', 'Photos Complete → Negotiation'],
-      price_negotiation: ['consignment_approval', 'Send for Consignment Approval'],
-      consignment_approval: ['appointment_scheduling', 'Approve Consignment'],
-      appointment_scheduling: ['dropoff_pickup_courier', 'Mark In Transit to Receiving'],
+      initial_photo_submission: ['price_negotiation', 'Submit'],
+      price_negotiation: ['consignment_approval', 'Submit'],
+      consignment_approval: ['appointment_scheduling', 'Approve'],
+      appointment_scheduling: ['dropoff_pickup_courier', 'Submit'],
     }[i.stage];
     const local = i.appointmentAt ? new Date(new Date(i.appointmentAt).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
 
@@ -488,7 +487,6 @@ const ConsignmentFlow = {
           </select>
           ${editable ? '<button class="btn-secondary" id="pre-save-lead" style="white-space:nowrap;">Save</button>' : ''}
         </div>
-        <small class="cell-muted">Qualified moves the item to Initial Photos; Negotiation to Price Negotiation; Rejected or Cancelled closes it.</small>
       </div>
 
       <details ${['initial_photo_submission', 'lead_qualification'].includes(i.stage) ? 'open' : ''} style="margin-bottom:12px;">
@@ -539,7 +537,7 @@ const ConsignmentFlow = {
       </details>
 
       ${editable && next ? `<button class="btn-confirm" id="pre-advance" data-target="${next[0]}" style="width:100%; margin-top:6px;">${next[1]}</button>` : ''}
-      ${editable && i.stage === 'consignment_approval' ? '<button class="btn-secondary" id="pre-not-approved" style="width:100%; margin-top:6px; color:var(--danger-red);">Not Approved (close)</button>' : ''}
+      ${editable && i.stage === 'consignment_approval' ? '<button class="btn-secondary" id="pre-not-approved" style="width:100%; margin-top:6px; color:var(--danger-red);">Not Approved</button>' : ''}
       ${['customer_inquiry', 'lead_qualification'].includes(i.stage) ? '<p class="cell-muted" style="font-size:12px; margin-top:8px;">Set the lead status to Qualified to continue.</p>' : ''}
       <button class="btn-secondary" id="pre-history" style="width:100%; margin-top:8px;">View Activity Log</button>`;
   },
@@ -656,7 +654,6 @@ const ConsignmentFlow = {
 
     return `
       <h1 class="page-title" style="margin-bottom:4px;">Intake & Agreements</h1>
-      <p class="cell-muted" style="margin:0 0 16px;">Stages 8–9: verify the consignor, record the item, sign the agreement, receive it, and confirm the authentication fee.</p>
       <div class="card" style="margin-bottom:18px;">
         <div class="card-title" style="margin-bottom:12px;">Receiving Queue (${queue.length})</div>
         ${this.queueTable(queue, this.selected.intake, [
@@ -665,7 +662,7 @@ const ConsignmentFlow = {
           ['Arrival', (i) => `${escapeHtml(FULFILLMENT_METHODS[i.fulfillment] || '—')}<div class="cell-muted" style="font-size:11.5px;">${escapeHtml(this.fmtDate(i.appointmentAt))}</div>`],
           ['Agreed Payout', (i) => this.peso(i.agreedPayout)],
           ['Stage', (i) => this.stageBadge(i.stage) + (this.isDetailsRevision(i) ? `<div>${badge('Details revision', 'danger')}</div>` : '')],
-        ], 'No items waiting to be received. Items appear here once marked In Transit on Inquiries & Pre-Intake.')}
+        ], 'No items waiting to be received.')}
       </div>
       ${sel ? this.renderIntakePanel(sel, editable) : ''}`;
   },
@@ -719,7 +716,7 @@ const ConsignmentFlow = {
               <input class="field-input" type="file" id="int-id-file" accept="image/jpeg,image/png,image/webp,application/pdf" ${dis}>
             </div>
           </div>
-          ${editable ? '<button class="btn-secondary" id="int-verify-id" style="margin-bottom:14px;">Upload ID & Mark Verified</button>' : ''}`}
+          ${editable ? '<button class="btn-secondary" id="int-verify-id" style="margin-bottom:14px;">Upload</button>' : ''}`}
 
           <h3 style="font-size:14px; margin:6px 0 8px;">2. Item Details</h3>
           ${lockDetails ? '<p class="cell-muted" style="font-size:12px;">Details are locked after receiving.</p>' : ''}
@@ -739,7 +736,7 @@ const ConsignmentFlow = {
               ${this.inputField('hardware', 'Hardware', i.hardware, dis || (lockDetails ? 'disabled' : ''))}
             </div>
             <div class="section-grid">
-              ${this.inputField('serial', 'Serial Number', i.serial, dis || (lockDetails ? 'disabled' : ''), false, 'Required to receive')}
+              ${this.inputField('serial', 'Serial Number', i.serial, dis || (lockDetails ? 'disabled' : ''), false, 'e.g. SN-01234567')}
               ${this.inputField('microchip', 'Microchip Number', i.microchip, dis || (lockDetails ? 'disabled' : ''))}
               ${this.inputField('dateCode', 'Date Code', i.dateCode, dis || (lockDetails ? 'disabled' : ''))}
             </div>
@@ -779,7 +776,6 @@ const ConsignmentFlow = {
           <div class="card-title" style="margin-bottom:10px;">5. Receive Item</div>
           ${this.checklistHtml(checks)}
           ${atDoor && editable ? `<button class="btn-confirm" id="int-receive" style="width:100%; margin-top:12px;${ready ? '' : ' opacity:.5; cursor:not-allowed;'}" ${ready ? '' : 'disabled'}>Receive Item</button>` : ''}
-          ${atDoor && !ready ? '<small class="cell-muted">Receive Item unlocks when every line above is ticked.</small>' : ''}
           ${!atDoor ? '<div style="font-size:12.5px; color:var(--green); margin-top:8px;">✓ Received</div>' : ''}
 
           ${revision ? `

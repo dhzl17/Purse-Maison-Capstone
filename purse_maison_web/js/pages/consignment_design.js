@@ -84,7 +84,6 @@ Object.assign(ConsignmentFlow, {
 
     return `
       <h1 class="page-title" style="margin-bottom:4px;">Design & Listing</h1>
-      <p class="cell-muted" style="margin:0 0 16px;">Edit and approve listing photos, then write the listing once pricing is done.</p>
       <div class="section-grid" style="align-items:flex-start;">
         <div class="card col-wide">
           <div class="card-title" style="margin-bottom:12px;">Photo Editing & Approval (${editing.length})</div>

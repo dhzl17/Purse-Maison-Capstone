@@ -81,7 +81,6 @@ Object.assign(ConsignmentFlow, {
 
     return `
       <h1 class="page-title" style="margin-bottom:4px;">Photography Tasks</h1>
-      <p class="cell-muted" style="margin:0 0 16px;">Authenticated items waiting for listing photos. Oldest first.${mine ? ` You have ${mine} item(s) assigned.` : ''}</p>
       <div class="card" style="margin-bottom:18px;">
         <div class="card-title" style="margin-bottom:12px;">Photography Queue (${queue.length})</div>
         ${this.queueTable(queue, this.selectedPhotoItem, [

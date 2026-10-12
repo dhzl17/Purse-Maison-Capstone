@@ -65,7 +65,6 @@ Object.assign(ConsignmentFlow, {
 
     return `
       <h1 class="page-title" style="margin-bottom:4px;">Sales & Payouts</h1>
-      <p class="cell-muted" style="margin:0 0 14px;">Record sales on live listings, verify payments, release consignor payouts, and manage contracts.</p>
       ${expired ? `<div class="card" style="margin-bottom:14px; border-left:4px solid var(--danger-red); padding:10px 14px; font-size:13px;"><strong style="color:var(--danger-red);">${expired} listing(s) past the consignment period.</strong> Extend them with the consignor's agreement, or process a withdrawal.</div>` : ''}
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
         ${tab('live', 'Live Listings', live.length)}
