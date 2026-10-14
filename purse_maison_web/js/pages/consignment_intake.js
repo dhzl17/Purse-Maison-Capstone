@@ -112,7 +112,6 @@ const ConsignmentFlow = {
   fmtDate(iso) { return iso ? DataStore.formatDateTime(iso) : '—'; },
   photoCount(i) { return Object.keys(INTAKE_PHOTO_TYPES).filter((t) => i.photos[t]).length; },
 
-  /** Turns database errors into messages staff can act on. */
   friendly(err) {
     const msg = (err && (err.message || err.error_description)) || 'Unknown error';
     if (/duplicate key/i.test(msg)) {
@@ -126,7 +125,6 @@ const ConsignmentFlow = {
     return msg;
   },
 
-  /** Runs a save, shows the result, reloads the pipeline and redraws. Returns true on success. */
   async save(button, successMessage, fn) {
     if (button) button.disabled = true;
     try {
@@ -173,7 +171,6 @@ const ConsignmentFlow = {
     if (error) throw error;
   },
 
-  /** Fills <img data-photo-path> elements with short-lived signed links (the buckets are private). */
   async fillPhotos(bucket) {
     const imgs = Array.from(document.querySelectorAll(`img[data-photo-bucket="${bucket}"]`));
     const needed = imgs.map((img) => img.dataset.photoPath).filter((p) => p && !this.photoUrls[p]);
@@ -187,40 +184,65 @@ const ConsignmentFlow = {
     }
   },
 
-  renderPhotoGrid(item, editable) {
-    const slot = (type, label, optional) => {
-      const path = item.photos[type];
-      return `
-        <div class="photo-slot-card" style="border:1px solid #E2E8F0; padding:8px; border-radius:6px; text-align:center;">
-          <div style="font-size:11.5px; font-weight:600;">${escapeHtml(label)}${optional ? ' <span class="cell-muted">(optional)</span>' : ''}</div>
-          <div class="photo-preview-box" style="margin:6px 0; height:90px; display:flex; align-items:center; justify-content:center; background:#F1F5F9; border-radius:6px; overflow:hidden;">
-            ${path ? `<img data-photo-bucket="intake-photos" data-photo-path="${escapeHtml(path)}" alt="${escapeHtml(label)}" style="max-width:100%; max-height:90px; object-fit:contain;">` : ''}
-          </div>
-          <div style="font-size:11px; font-weight:600; color:${path ? 'var(--green)' : (optional ? 'var(--text-muted)' : 'var(--danger-red)')};">${path ? 'Uploaded' : 'Missing'}</div>
-          ${editable ? `
-            <label class="btn-secondary" style="display:inline-block; margin-top:6px; padding:3px 8px; font-size:11px; cursor:pointer;">
-              ${path ? 'Replace' : 'Upload'}
-              <input type="file" accept="image/jpeg,image/png,image/webp" data-photo-upload="${type}" style="display:none;">
-            </label>` : ''}
-        </div>`;
-    };
+
+  photoCardHtml(bucket, type, path, label, optional, editable, uploadAttr) {
     return `
-      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:8px;">
+      <div class="photo-card">
+        <div class="photo-card-thumb"${path ? ` data-photo-preview="1" data-photo-bucket="${bucket}" data-photo-path="${escapeHtml(path)}" title="Click to preview"` : ''}>
+          ${path ? `<img data-photo-bucket="${bucket}" data-photo-path="${escapeHtml(path)}" alt="${escapeHtml(label)}">` : '<i class="fa-regular fa-image photo-card-thumb-icon"></i>'}
+        </div>
+        <div class="photo-card-info">
+          <div class="photo-card-label">${escapeHtml(label)}${optional ? ' <span class="cell-muted">(optional)</span>' : ''}</div>
+          <div class="photo-card-status ${path ? 'is-uploaded' : (optional ? 'is-optional' : 'is-missing')}">${path ? 'Uploaded' : 'Missing'}</div>
+        </div>
+        ${editable ? `
+          <label class="photo-card-action">
+            <span class="photo-card-action-text">${path ? 'Replace' : 'Upload'}</span>
+            <input type="file" accept="image/jpeg,image/png,image/webp" ${uploadAttr}="${type}" style="display:none;">
+          </label>` : ''}
+      </div>`;
+  },
+
+
+  bindPhotoPreviews(container) {
+    (container || document).querySelectorAll('[data-photo-preview]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const bucket = el.dataset.photoBucket, path = el.dataset.photoPath;
+        const url = this.photoUrls[path];
+        const overlay = openModal({ title: 'Photo Preview', bodyHtml: url
+          ? `<img src="${escapeHtml(url)}" alt="" style="width:100%; border-radius:10px; display:block;">`
+          : '<p class="cell-muted">Loading…</p>' });
+        if (!url) {
+          sbClient.storage.from(bucket).createSignedUrl(path, 3600).then(({ data }) => {
+            if (data && overlay.isConnected) overlay.querySelector('.modal-body').innerHTML =
+              `<img src="${escapeHtml(data.signedUrl)}" alt="" style="width:100%; border-radius:10px; display:block;">`;
+          });
+        }
+      });
+    });
+  },
+
+  renderPhotoGrid(item, editable) {
+    const slot = (type, label, optional) =>
+      this.photoCardHtml('intake-photos', type, item.photos[type], label, optional, editable, 'data-photo-upload');
+    return `
+      <div class="photo-card-grid">
         ${Object.entries(INTAKE_PHOTO_TYPES).map(([t, l]) => slot(t, l, false)).join('')}
         ${Object.entries(OPTIONAL_INTAKE_PHOTOS).map(([t, l]) => slot(t, l, true)).join('')}
       </div>
-      <div style="font-size:12.5px; margin-top:8px; font-weight:600; color:${this.photoCount(item) === 10 ? 'var(--green)' : 'var(--danger-red)'};">
+      <div class="photo-progress ${this.photoCount(item) === 10 ? 'is-complete' : ''}">
         ${this.photoCount(item)} / 10 required photos uploaded
       </div>`;
   },
 
   bindPhotoUploads(item) {
+    this.bindPhotoPreviews();
     document.querySelectorAll('[data-photo-upload]').forEach((input) => {
       input.addEventListener('change', async (e) => {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
         const label = INTAKE_PHOTO_TYPES[input.dataset.photoUpload] || OPTIONAL_INTAKE_PHOTOS[input.dataset.photoUpload];
-        input.closest('label').firstChild.textContent = 'Uploading… ';
+        input.closest('label').querySelector('.photo-card-action-text').textContent = 'Uploading…';
         await this.save(null, `${label} photo uploaded.`, () => this.uploadIntakePhoto(item, input.dataset.photoUpload, file));
       });
     });

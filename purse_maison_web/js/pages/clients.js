@@ -31,6 +31,28 @@ const ClientsPage = {
     return status === 'assigned' ? badge('Assigned', 'warning') : badge('Available', 'success');
   },
 
+  renderAssignedClients(a) {
+    const names = a.assignedClients || [];
+    if (!names.length) return '<span class="cell-muted">-</span>';
+    const shown = names.slice(0, 1).map((n) => escapeHtml(n)).join(', ');
+    const extra = names.length - 1;
+    return extra > 0
+      ? `${shown}, <button type="button" class="assoc-clients-more" data-view-clients="${escapeHtml(a.id)}">+${extra} more</button>`
+      : shown;
+  },
+
+  openClientsModal(associateId) {
+    const a = DB.salesAssociates.find((x) => x.id === associateId);
+    if (!a) return;
+    const names = a.assignedClients || [];
+    const html = `
+      <p style="margin-bottom:12px; font-size:13.5px;"><strong>${escapeHtml(a.associateName)}</strong> &middot; ${names.length} assigned client${names.length === 1 ? '' : 's'}</p>
+      <div class="assoc-clients-modal-list">
+        ${names.map((n) => `<div class="feed-item">${escapeHtml(n)}</div>`).join('')}
+      </div>`;
+    openModal({ title: 'Clients', bodyHtml: html });
+  },
+
   filterAndSortInquiries(items) {
     let list = [...items];
     if (this.searchKeyword) {
@@ -95,7 +117,8 @@ const ClientsPage = {
                   inquiries.map((i) => `
                   <tr style="text-align: center; vertical-align: middle;">
                     <td style="text-align: center; vertical-align: middle;">${i.no}</td>
-                    <td class="cell-bold" style="text-align: center; vertical-align: middle;">${escapeHtml(i.clientName)}${i.isVip ? ' <span title="VIP client" style="color:#b8860b;">★</span>' : ''}</td>
+                    
+                    <td class="cell-bold" style="text-align: center; vertical-align: middle;"><span style="display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap;">${i.isVip ? '<span title="VIP client" style="color:#b8860b;">★</span>' : ''}<span>${escapeHtml(i.clientName)}</span></span></td>
                     <td class="cell-center" style="text-align: center; vertical-align: middle; white-space: nowrap;">${escapeHtml(i.clientType)}</td>
                     <td class="cell-center" style="text-align: center; vertical-align: middle;">${escapeHtml(i.clientRole)}</td>
                     <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.inquiryStatusBadge(i.inquiryStatus)}</td>
@@ -133,7 +156,7 @@ const ClientsPage = {
                   <tr style="text-align: center; vertical-align: middle;">
                     <td class="cell-bold" style="text-align: center; vertical-align: middle; white-space: nowrap;">${escapeHtml(a.associateName)}</td>
                     <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.associateStatusBadge(a.status)}</td>
-                    <td class="${a.currentClient === '-' ? 'cell-muted' : ''}" style="text-align: center; vertical-align: middle;">${escapeHtml(a.currentClient)}</td>
+                                        <td style="text-align: center; vertical-align: middle;">${this.renderAssignedClients(a)}</td>
                     <td style="text-align: center; vertical-align: middle; white-space: nowrap;">${a.openInquiries} inq · ${a.openConsignments} cons</td>
                   </tr>`).join('')}
               </tbody>
@@ -150,8 +173,11 @@ const ClientsPage = {
           <button class="quick-action-btn" id="btn-quick-online">+ Add Online Inquiry</button>
         </div>` : ''}
         <div class="chart-card col-wide">
-          <div class="card-title" style="margin-bottom:14px;">Recent Assignment Activity</div>
-          ${activity.map((a) => `
+          <div class="activity-card-header">
+            <div class="card-title">Recent Assignment Activity</div>
+                        ${activity.length ? '<button type="button" class="btn-add" id="btn-view-all-activity">View All</button>' : ''}
+          </div>
+          ${activity.slice(0, 5).map((a) => `
             <div class="feed-item">
               <div class="feed-desc">${escapeHtml(a.description)}</div>
               <div class="feed-time">${escapeHtml(a.timestamp)}</div>
@@ -183,6 +209,12 @@ const ClientsPage = {
       });
     }
 
+     document.getElementById('btn-view-all-activity')?.addEventListener('click', () => this.openActivityHistory());
+
+    document.querySelectorAll('[data-view-clients]').forEach((btn) => {
+      btn.addEventListener('click', () => this.openClientsModal(btn.dataset.viewClients));
+    });
+
     if (!this.canWrite()) return;
 
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
@@ -196,6 +228,48 @@ const ClientsPage = {
         if (item) this.openInquiryForm(item);
       });
     });
+  },
+
+  async fetchAllActivity() {
+    const PAGE_SIZE = 1000;
+    const all = [];
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data, error } = await sbClient.from('assignment_activity')
+        .select('id, description, created_at')
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+      if (error) throw error;
+      all.push(...data);
+      if (data.length < PAGE_SIZE) break;
+    }
+    return all;
+  },
+
+  async openActivityHistory() {
+    const overlay = openModal({
+      title: 'Assignment Activity History',
+      bodyHtml: '<p class="cell-muted">Loading activity…</p>',
+    });
+    const body = overlay.querySelector('.modal-body');
+    try {
+      const rows = await this.fetchAllActivity();
+      if (!overlay.isConnected) return; // the modal was closed while loading
+      body.innerHTML = rows.length ? `
+        <div class="activity-history-count">${rows.length} ${rows.length === 1 ? 'activity' : 'Activities'} · Newest First</div>
+        <div class="activity-history-list">
+          ${rows.map((a) => `
+            <div class="feed-item">
+              <div class="feed-desc">${escapeHtml(a.description)}</div>
+              <div class="feed-time">${escapeHtml(DataStore.formatDateTime(a.created_at))}</div>
+            </div>`).join('')}
+        </div>` : '<p class="cell-muted">No activity yet.</p>';
+    } catch (err) {
+      console.error('Loading activity history failed:', err);
+      if (overlay.isConnected) {
+        body.innerHTML = `<p class="cell-muted">Could not load the activity history: ${escapeHtml(err.message || 'unknown error')}</p>`;
+      }
+    }
   },
 
   openInquiryForm(existing, initialChannel) {
@@ -225,8 +299,8 @@ const ClientsPage = {
     const html = `
       <form id="inquiry-form">
         <div class="field-group"><label class="field-label">Client Name</label><input class="field-input" name="clientName" required value="${escapeHtml(existing?.clientName || '')}"></div>
-        <div class="field-group"><label class="field-label">Phone (optional)</label><input class="field-input" name="phone" value="${escapeHtml(existing?.phone || '')}"></div>
-        <div class="field-group"><label class="field-label">Email (optional)</label><input class="field-input" name="email" type="email" value="${escapeHtml(existing?.email || '')}"></div>
+        <div class="field-group"><label class="field-label">Phone</label><input class="field-input" name="phone" value="${escapeHtml(existing?.phone || '')}"></div>
+        <div class="field-group"><label class="field-label">Email</label><input class="field-input" name="email" type="email" value="${escapeHtml(existing?.email || '')}"></div>
         <div class="field-group"><label class="field-label">Client Role</label>
           <select class="field-input" name="clientRole">
             <option value="buyer" ${sel((existing?.clientRoleValue || 'buyer') === 'buyer')}>Buyer</option>
