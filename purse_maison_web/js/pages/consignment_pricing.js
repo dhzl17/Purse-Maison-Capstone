@@ -65,7 +65,6 @@ Object.assign(ConsignmentFlow, {
 
     return `
       <h1 class="page-title" style="margin-bottom:4px;">Pricing & Markup</h1>
-      <p class="cell-muted" style="margin:0 0 16px;">Set the final selling price. Markup and consignor payout are calculated automatically from the tier schedule.</p>
       <div class="card" style="margin-bottom:18px;">
         <div class="card-title" style="margin-bottom:12px;">Pricing Queue (${queue.length})</div>
         ${this.queueTable(queue, this.selectedPricingItem, [

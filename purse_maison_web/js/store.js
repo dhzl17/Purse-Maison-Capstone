@@ -32,7 +32,7 @@ const GROWTH_STABLE_BAND = 5;   // growth within +/-5% counts as "stable"
 const ALERT_GROWTH_PERCENT = 10; // growth beyond +/-10% raises an alert
 
 const INQUIRY_CHANNELS = {
-  walk_in: 'Walk-in', phone: 'Phone', email: 'Email', website: 'Website',
+  walk_in: 'Walk-in', email: 'Email', website: 'Website',
   facebook: 'Facebook', instagram: 'Instagram', tiktok: 'TikTok', messenger: 'Messenger', whatsapp: 'WhatsApp',
 };
 
@@ -243,19 +243,16 @@ const DataStore = {
       createdAt: r.created_at,
     }));
 
-    // Each associate, with the clients they are currently handling
     DB.salesAssociates = work.error ? [] : work.data.map((w) => {
       const open = DB.clientInquiries.filter((i) => i.assignedId === w.associate_id && i.inquiryStatus === 'assigned');
-      let currentClient = '-';
-      if (open.length === 1) currentClient = open[0].clientName;
-      else if (open.length > 1) currentClient = `${open[0].clientName} +${open.length - 1} more`;
+      const assignedClients = [...new Set(open.map((i) => i.clientName))]; // unique, in assignment order
       return {
         id: w.associate_id,
         associateName: w.full_name || names.get(w.associate_id) || '(unnamed)',
         status: w.status,
         openInquiries: w.open_inquiries || 0,
         openConsignments: w.open_consignments || 0,
-        currentClient,
+        assignedClients,
       };
     }).sort((a, b) => a.associateName.localeCompare(b.associateName));
 

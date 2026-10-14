@@ -36,7 +36,6 @@ Object.assign(ConsignmentFlow, {
 
     return `
       <h1 class="page-title" style="margin-bottom:4px;">Manager Approvals</h1>
-      <p class="cell-muted" style="margin:0 0 16px;">Review items before pricing, and publish finished listings.</p>
       <div class="card" style="margin-bottom:18px;">
         <div class="card-title" style="margin-bottom:12px;">Awaiting Review (${review.length})</div>
         ${this.queueTable(review, this.selectedManagerItem, [
@@ -56,7 +55,7 @@ Object.assign(ConsignmentFlow, {
           ['Price', (i) => `<strong>${this.peso(i.price)}</strong>`],
           ['Channels', (i) => escapeHtml((i.listing.sales_channels || []).map((c) => SALES_CHANNELS[c] || c).join(', ') || '—')],
           ['Submitted', (i) => `<span style="font-size:12px;">${escapeHtml(this.fmtDate(i.listing.submitted_at))}</span>`],
-        ], 'No listings waiting to be published. Listings appear here after Pricing and Design.')}
+        ], 'No listings waiting to be published.')}
       </div>
       ${sel ? (sel.stage === 'manager_approval' ? this.renderReviewPanel(sel) : this.renderPublishPanel(sel)) : ''}`;
   },

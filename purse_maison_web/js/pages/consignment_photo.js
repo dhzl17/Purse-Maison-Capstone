@@ -48,27 +48,15 @@ Object.assign(ConsignmentFlow, {
     const lp = i.listingPhotos || {};
     const slot = (type, label, optional) => {
       const p = lp[type] || (type === 'side_left' ? lp.side_right : null);
-      return `
-        <div style="border:1px solid #E2E8F0; padding:8px; border-radius:6px; text-align:center;">
-          <div style="font-size:12px; font-weight:600;">${escapeHtml(label)}${optional ? ' <span class="cell-muted">(optional)</span>' : ''}</div>
-          <div style="margin:6px 0; height:120px; display:flex; align-items:center; justify-content:center; background:#F1F5F9; border-radius:6px; overflow:hidden;">
-            ${p ? `<img data-photo-bucket="listing-photos" data-photo-path="${escapeHtml(p.storage_path)}" alt="${escapeHtml(label)}" style="max-width:100%; max-height:120px; object-fit:contain;">` : ''}
-          </div>
-          <div style="font-size:11px; font-weight:600; color:${p ? 'var(--green)' : (optional ? 'var(--text-muted)' : 'var(--danger-red)')};">${p ? 'Uploaded' : 'Missing'}</div>
-          ${editable ? `
-            <label class="btn-secondary" style="display:inline-block; margin-top:6px; padding:3px 8px; font-size:11px; cursor:pointer;">
-              <span>${p ? 'Replace' : 'Upload'}</span>
-              <input type="file" accept="image/jpeg,image/png,image/webp" data-listing-upload="${type}" style="display:none;">
-            </label>` : ''}
-        </div>`;
+      return this.photoCardHtml('listing-photos', type, p && p.storage_path, label, optional, editable, 'data-listing-upload');
     };
     const n = this.listingPhotoCount(i);
     return `
-      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:10px;">
+      <div class="photo-card-grid">
         ${Object.entries(LISTING_PHOTO_TYPES).map(([t, l]) => slot(t, l, false)).join('')}
         ${Object.entries(OPTIONAL_LISTING_PHOTOS).map(([t, l]) => slot(t, l, true)).join('')}
       </div>
-      <div style="font-size:12.5px; margin-top:8px; font-weight:600; color:${n === 7 ? 'var(--green)' : 'var(--danger-red)'};">${n} / 7 required shots uploaded</div>`;
+      <div class="photo-progress ${n === 7 ? 'is-complete' : ''}">${n} / 7 required shots uploaded</div>`;
   },
 
   // ------------------------------------------------------------------ render
@@ -81,7 +69,6 @@ Object.assign(ConsignmentFlow, {
 
     return `
       <h1 class="page-title" style="margin-bottom:4px;">Photography Tasks</h1>
-      <p class="cell-muted" style="margin:0 0 16px;">Authenticated items waiting for listing photos. Oldest first.${mine ? ` You have ${mine} item(s) assigned.` : ''}</p>
       <div class="card" style="margin-bottom:18px;">
         <div class="card-title" style="margin-bottom:12px;">Photography Queue (${queue.length})</div>
         ${this.queueTable(queue, this.selectedPhotoItem, [
@@ -177,18 +164,18 @@ Object.assign(ConsignmentFlow, {
     on('photo-submit', (btn) => this.save(btn, `${i.code} sent to Design for editing and approval.`,
       () => this.updateItem(i.id, { current_stage: 'photo_editing_approval' })));
 
+    this.bindPhotoPreviews();
     document.querySelectorAll('[data-listing-upload]').forEach((input) => {
       input.addEventListener('change', async (e) => {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
         const type = input.dataset.listingUpload;
         const label = LISTING_PHOTO_TYPES[type] || OPTIONAL_LISTING_PHOTOS[type];
-        const span = input.parentElement.querySelector('span');
+        const span = input.closest('label').querySelector('.photo-card-action-text');
         if (span) span.textContent = 'Uploading…';
         await this.save(null, `${label} shot uploaded.`, () => this.uploadListingPhoto(i, type, file));
       });
     });
   },
-});
 
 ConsignmentFlow.pages['consignment-photo'] = ['renderPhoto', 'bindPhoto'];

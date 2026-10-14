@@ -85,7 +85,6 @@ Object.assign(ConsignmentFlow, {
 
     return `
       <h1 class="page-title" style="margin-bottom:4px;">Authentication Service</h1>
-      <p class="cell-muted" style="margin:0 0 12px;">Double authentication within the 24-hour SLA. Items are ordered by deadline, most urgent first.</p>
       ${breached || atRisk ? `<div class="card" style="margin-bottom:14px; border-left:4px solid var(--danger-red); padding:10px 14px; font-size:13px;">
         ${breached ? `<strong style="color:var(--danger-red);">${breached} item(s) past the 24-hour SLA.</strong> ` : ''}
         ${atRisk ? `<strong style="color:var(--warning-amber);">${atRisk} item(s) due within 2 hours.</strong>` : ''}
@@ -100,7 +99,7 @@ Object.assign(ConsignmentFlow, {
           ['2nd Check', (i) => this.slotCell(i.auth, 'secondary')],
           ['Certificate', (i) => (i.auth.certificate_url ? badge('Uploaded', 'success') : '<span class="cell-muted">—</span>')],
           ['Stage', (i) => this.stageBadge(i.stage)],
-        ], 'No items waiting for authentication. Items appear here once their authentication payment is confirmed.')}
+        ], 'No items waiting for authentication.')}
       </div>
       ${sel ? this.renderAuthPanel(sel) : ''}`;
   },
