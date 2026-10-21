@@ -269,6 +269,11 @@ img { max-width: 100%; display: block; }
   padding: 32px 16px 16px;
   display: flex;
   flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  align-self: flex-start;
+  overflow-y: auto;
   transition: width 0.25s ease, padding 0.25s ease, opacity 0.2s ease;
   overflow-x: hidden;
   white-space: nowrap;
