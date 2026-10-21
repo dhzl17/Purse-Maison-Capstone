@@ -154,15 +154,16 @@ def run_forecast(run, settings):
     for brand_key, group in history.groupby("brand_key"):
         brand = group["brand"].iloc[0]
         revenue = monthly_series(group, "revenue", last_month)
+        months_with_sales = int((group["revenue"] > 0).sum())   # months that actually had sales
         model = {"run_id": run["id"], "brand_key": brand_key, "brand": brand,
-                 "months_of_history": len(revenue), "outcome": None,
+                 "months_of_history": months_with_sales, "outcome": None,
                  "arima_order": None, "mae": None, "notes": None}
 
-        if len(revenue) < min_months:
+        if months_with_sales < min_months:
             model.update(outcome="skipped_insufficient_data",
-                         notes=f"Only {len(revenue)} month(s) of history; needs {min_months}")
+                         notes=f"Sales in only {months_with_sales} of {len(revenue)} month(s); needs {min_months}")
             models.append(model)
-            print(f"  {brand}: skipped, only {len(revenue)} month(s) of history")
+            print(f"  {brand}: skipped, sales in only {months_with_sales} of {len(revenue)} month(s)")
             continue
 
         try:

@@ -469,8 +469,9 @@ const DataStore = {
         alerts.push(`Demand for ${s.brand} is projected to fall ${Math.abs(s.projectedGrowthPercent)}% over the next ${s.months} months. Consider reducing inventory.`);
       }
     }
-    for (const k of skipped) {
-      alerts.push(`${k.brand} was skipped: ${k.months ?? 0} month(s) of sales history is not enough for a forecast.`);
+    if (skipped.length) {
+      const names = skipped.map((k) => k.brand).sort((a, b) => a.localeCompare(b));
+      alerts.push(`${names.length} brand(s) were not forecast because they had too few months with sales: ${names.join(', ')}.`);
     }
     if (latestRun && latestRun.status === 'failed') {
       alerts.push(`The last forecast run failed: ${latestRun.error_message || 'no details recorded'}.`);
