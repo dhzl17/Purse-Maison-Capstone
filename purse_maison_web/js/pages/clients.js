@@ -12,6 +12,8 @@ const CLIENT_WRITE_ROLES = ['consignmentTeam', 'salesAssociate', 'manager', 'sup
 const ClientsPage = {
   searchKeyword: '',
   sortBy: 'recently',
+  activityPage: 1,
+  activityPageSize: 5,
 
   canWrite() {
     const role = Session.currentUser && Session.currentUser.role;
@@ -175,13 +177,8 @@ const ClientsPage = {
         <div class="chart-card col-wide">
           <div class="activity-card-header">
             <div class="card-title">Recent Assignment Activity</div>
-                        ${activity.length ? '<button type="button" class="btn-add" id="btn-view-all-activity">View All</button>' : ''}
           </div>
-          ${activity.slice(0, 5).map((a) => `
-            <div class="feed-item">
-              <div class="feed-desc">${escapeHtml(a.description)}</div>
-              <div class="feed-time">${escapeHtml(a.timestamp)}</div>
-            </div>`).join('') || '<p class="cell-muted">No activity yet.</p>'}
+          <div id="activity-body">${this.activityBodyHtml()}</div>
         </div>
       </div>
     `;
@@ -209,7 +206,7 @@ const ClientsPage = {
       });
     }
 
-     document.getElementById('btn-view-all-activity')?.addEventListener('click', () => this.openActivityHistory());
+      this.bindActivityPager();
 
     document.querySelectorAll('[data-view-clients]').forEach((btn) => {
       btn.addEventListener('click', () => this.openClientsModal(btn.dataset.viewClients));
@@ -230,46 +227,33 @@ const ClientsPage = {
     });
   },
 
-  async fetchAllActivity() {
-    const PAGE_SIZE = 1000;
-    const all = [];
-    for (let from = 0; ; from += PAGE_SIZE) {
-      const { data, error } = await sbClient.from('assignment_activity')
-        .select('id, description, created_at')
-        .order('created_at', { ascending: false })
-        .order('id', { ascending: false })
-        .range(from, from + PAGE_SIZE - 1);
-      if (error) throw error;
-      all.push(...data);
-      if (data.length < PAGE_SIZE) break;
-    }
-    return all;
+  activityBodyHtml() {
+    const list = DB.assignmentActivity;
+    const totalPages = Math.max(1, Math.ceil(list.length / this.activityPageSize));
+    this.activityPage = Math.min(Math.max(1, this.activityPage), totalPages);
+    const start = (this.activityPage - 1) * this.activityPageSize;
+    const items = list.slice(start, start + this.activityPageSize);
+    return `
+      <div class="activity-feed-list${totalPages > 1 ? ' paged' : ''}">
+        ${items.map((a) => `
+          <div class="feed-item">
+            <div class="feed-desc">${escapeHtml(a.description)}</div>
+            <div class="feed-time">${escapeHtml(a.timestamp)}</div>
+          </div>`).join('') || '<p class="cell-muted">No activity yet.</p>'}
+      </div>
+      ${totalPages > 1 ? `<div class="pagination pager-compact">${renderPaginationButtons(this.activityPage, totalPages)}</div>` : ''}`;
   },
 
-  async openActivityHistory() {
-    const overlay = openModal({
-      title: 'Assignment Activity History',
-      bodyHtml: '<p class="cell-muted">Loading activity…</p>',
+  bindActivityPager() {
+    const box = document.getElementById('activity-body');
+    if (!box) return;
+    box.querySelector('.pagination')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-page]');
+      if (!btn || btn.disabled) return;
+      this.activityPage = parseInt(btn.dataset.page, 10);
+      box.innerHTML = this.activityBodyHtml();
+      this.bindActivityPager();
     });
-    const body = overlay.querySelector('.modal-body');
-    try {
-      const rows = await this.fetchAllActivity();
-      if (!overlay.isConnected) return; // the modal was closed while loading
-      body.innerHTML = rows.length ? `
-        <div class="activity-history-count">${rows.length} ${rows.length === 1 ? 'activity' : 'Activities'} · Newest First</div>
-        <div class="activity-history-list">
-          ${rows.map((a) => `
-            <div class="feed-item">
-              <div class="feed-desc">${escapeHtml(a.description)}</div>
-              <div class="feed-time">${escapeHtml(DataStore.formatDateTime(a.created_at))}</div>
-            </div>`).join('')}
-        </div>` : '<p class="cell-muted">No activity yet.</p>';
-    } catch (err) {
-      console.error('Loading activity history failed:', err);
-      if (overlay.isConnected) {
-        body.innerHTML = `<p class="cell-muted">Could not load the activity history: ${escapeHtml(err.message || 'unknown error')}</p>`;
-      }
-    }
   },
 
   openInquiryForm(existing, initialChannel) {

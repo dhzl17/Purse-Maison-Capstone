@@ -6,6 +6,10 @@
 
 const ForecastingPage = {
   selectedBrand: 'all',
+  page: 1,
+  pageSize: 6,
+  alertPage: 1,
+  alertPageSize: 5,
 
   trendBadge(trend) {
     const map = { increasing: ['▲ Increasing', 'success'], decreasing: ['▼ Decreasing', 'danger'], stable: ['▬ Stable', 'warning'] };
@@ -36,6 +40,14 @@ const ForecastingPage = {
     const run = meta.latestRun;
     const horizon = meta.horizon || 6;
     const busy = this.runIsBusy();
+
+    const totalPages = Math.max(1, Math.ceil(rows.length / this.pageSize));
+    this.page = Math.min(Math.max(1, this.page), totalPages);
+    const pageRows = rows.slice((this.page - 1) * this.pageSize, this.page * this.pageSize);
+
+    const alertPages = Math.max(1, Math.ceil(DB.predictionAlerts.length / this.alertPageSize));
+    this.alertPage = Math.min(Math.max(1, this.alertPage), alertPages);
+    const pageAlerts = DB.predictionAlerts.slice((this.alertPage - 1) * this.alertPageSize, this.alertPage * this.alertPageSize);
 
     const runBadge = run && run.status !== 'completed'
       ? ' ' + badge(run.status === 'failed' ? 'Last run failed' : run.status === 'running' ? 'Running now' : 'Queued',
@@ -89,32 +101,34 @@ const ForecastingPage = {
             <span class="card-title">Brand Forecasts</span>
           </div>
           <div class="table-scroll">
-            <table class="data-table">
-              <thead><tr><th>Brand</th><th>Historical (₱)</th><th>Projected (₱)</th><th>Growth %</th><th>Trend</th><th>Avg. Error (MAE)</th></tr></thead>
+            <table class="data-table forecast-table">
+              <thead><tr><th class="fc-brand">Brand</th><th class="fc-hist">Historical (₱)</th><th class="fc-proj">Projected (₱)</th><th class="fc-growth">Growth %</th><th class="fc-trend">Trend</th><th class="fc-mae">Avg. Error (MAE)</th></tr></thead>
               <tbody>
-                ${rows.length === 0 ? `<tr><td colspan="6" class="cell-center cell-muted" style="padding:24px;text-align:center;">No forecast to show yet.</td></tr>` : rows.map((f) => {
+                ${rows.length === 0 ? `<tr><td colspan="6" class="cell-center cell-muted" style="padding:24px;text-align:center;">No forecast to show yet.</td></tr>` : pageRows.map((f) => {
                   const g = f.projectedGrowthPercent;
                   return `
                   <tr>
-                    <td class="cell-bold">${escapeHtml(f.brand)}</td>
-                    <td>${escapeHtml(f.historicalSales)}</td>
-                    <td>${escapeHtml(f.projectedSales)}</td>
-                    <td style="color:${g === null ? 'inherit' : g >= 0 ? 'var(--green)' : 'var(--danger-red)'};font-weight:600;">${g === null ? '—' : `${g >= 0 ? '+' : ''}${g}%`}</td>
-                    <td class="cell-center">${this.trendBadge(f.trend)}</td>
-                    <td>${f.mae === null ? '—' : '₱' + formatAmount(f.mae)}</td>
+                    <td class="fc-brand cell-bold">${escapeHtml(f.brand)}</td>
+                    <td class="fc-hist">${escapeHtml(f.historicalSales)}</td>
+                    <td class="fc-proj">${escapeHtml(f.projectedSales)}</td>
+                    <td class="fc-growth" style="color:${g === null ? 'inherit' : g >= 0 ? 'var(--green)' : 'var(--danger-red)'};font-weight:600;">${g === null ? '—' : `${g >= 0 ? '+' : ''}${g}%`}</td>
+                    <td class="fc-trend">${this.trendBadge(f.trend)}</td>
+                    <td class="fc-mae">${f.mae === null ? '—' : '₱' + formatAmount(f.mae)}</td>
                   </tr>`;
-                }).join('')}
+                }).join('')}${fillerRows(pageRows.length, this.pageSize, 6, totalPages)}
               </tbody>
             </table>
           </div>
+          ${totalPages > 1 ? `<div class="pagination" id="forecast-pagination">${renderPaginationButtons(this.page, totalPages)}</div>` : ''}
         </div>
         <div class="chart-card col-narrow">
           <div class="card-title" style="margin-bottom:14px;">Prediction Alerts</div>
-          ${DB.predictionAlerts.map((a) => `
+          ${pageAlerts.map((a) => `
             <div class="feed-item">
               <div class="feed-desc">${escapeHtml(a.description)}</div>
               <div class="feed-time">${escapeHtml(a.timestamp)}</div>
             </div>`).join('') || '<p class="cell-muted">No alerts yet.</p>'}
+          ${alertPages > 1 ? `<div class="pagination" id="alerts-pagination">${renderPaginationButtons(this.alertPage, alertPages)}</div>` : ''}
         </div>
       </div>
     `;
@@ -123,6 +137,19 @@ const ForecastingPage = {
   afterRender() {
     document.getElementById('forecast-brand')?.addEventListener('change', (e) => {
       this.selectedBrand = e.target.value;
+      this.page = 1;
+      Router.rerender();
+    });
+    document.getElementById('forecast-pagination')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-page]');
+      if (!btn || btn.disabled) return;
+      this.page = parseInt(btn.dataset.page, 10);
+      Router.rerender();
+    });
+    document.getElementById('alerts-pagination')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-page]');
+      if (!btn || btn.disabled) return;
+      this.alertPage = parseInt(btn.dataset.page, 10);
       Router.rerender();
     });
     document.getElementById('btn-request-forecast')?.addEventListener('click', () => this.requestForecast());

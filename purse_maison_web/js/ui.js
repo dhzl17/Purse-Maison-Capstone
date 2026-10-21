@@ -197,3 +197,9 @@ function renderPaginationButtons(current, total) {
       <span class="page-nav-label">Next</span><span class="page-nav-arrow">⟶</span>
     </button>`;
 }
+
+function fillerRows(rendered, pageSize, colCount, totalPages) {
+  const n = pageSize - rendered;
+  if (totalPages <= 1 || rendered === 0 || n <= 0) return '';
+  return Array(n).fill(`<tr class="filler-row" aria-hidden="true"><td colspan="${colCount}"></td></tr>`).join('');
+}

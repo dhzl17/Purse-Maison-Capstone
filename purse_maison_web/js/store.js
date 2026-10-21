@@ -209,7 +209,7 @@ const DataStore = {
       sbClient.from('assignment_activity')
         .select('description, created_at')
         .order('created_at', { ascending: false })
-        .limit(20),
+        .limit(60),
     ]);
 
     if (inq.error) {
@@ -256,8 +256,8 @@ const DataStore = {
       };
     }).sort((a, b) => a.associateName.localeCompare(b.associateName));
 
-    // Activity feed: written by database triggers (inquiry assignments, resolutions, consignment assignments)
-    DB.assignmentActivity = activity.error ? [] : activity.data.slice(0, 12).map((a, i) => ({
+    
+    DB.assignmentActivity = activity.error ? [] : activity.data.slice(0, 50).map((a, i) => ({
       id: `aa-${i}`,
       description: a.description,
       timestamp: this.formatDateTime(a.created_at),

@@ -567,6 +567,26 @@ table.data-table.overview-table { table-layout: fixed; min-width: 1390px; }
 
 .overview-table .ov-price     { text-align: right !important; padding-right: 20px !important; }
 .cell-muted { color: var(--text-muted); }
+
+table.data-table.forecast-table { table-layout: fixed; min-width: 640px; }
+table.data-table.forecast-table tbody tr { height: 56px; }
+table.data-table.forecast-table th.fc-brand,  table.data-table.forecast-table td.fc-brand  { width: 22%; text-align: left !important; }
+table.data-table.forecast-table th.fc-hist,   table.data-table.forecast-table td.fc-hist   { width: 17%; text-align: right !important; }
+table.data-table.forecast-table th.fc-proj,   table.data-table.forecast-table td.fc-proj   { width: 17%; text-align: right !important; }
+table.data-table.forecast-table th.fc-growth, table.data-table.forecast-table td.fc-growth { width: 12%; text-align: right !important; }
+table.data-table.forecast-table th.fc-trend,  table.data-table.forecast-table td.fc-trend  { width: 16%; text-align: center !important; }
+table.data-table.forecast-table th.fc-mae,    table.data-table.forecast-table td.fc-mae    { width: 16%; text-align: right !important; }
+.col-narrow .pagination { gap: 4px; }
+.col-narrow .pagination .page-nav { padding: 0 10px; }
+.col-narrow .pagination .page-nav-label { display: none; }
+.col-narrow .pagination .page-numbers { gap: 4px; }
+.col-narrow .pagination .page-numbers button { min-width: 30px; width: 30px; height: 30px; }
+.cell-muted { color: var(--text-muted); }
+
+table.data-table tbody tr.filler-row,
+table.data-table tbody tr.filler-row:hover { background: transparent; }
+table.data-table tbody tr.filler-row td { border: 0 !important; padding: 0 !important; }
+.cell-muted { color: var(--text-muted); }
 .cell-bold { font-weight: 600; }
 .cell-center { text-align: center; }
 
@@ -698,6 +718,13 @@ table.data-table.overview-table { table-layout: fixed; min-width: 1390px; }
 .activity-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .activity-history-count { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
 .activity-history-list { max-height: 60vh; overflow-y: auto; padding-right: 6px; }
+.pagination.pager-compact { gap: 4px; margin: 12px 0 0; }
+.pagination.pager-compact .page-nav { padding: 0 10px; }
+.pagination.pager-compact .page-nav-label { display: none; }
+.pagination.pager-compact .page-numbers { gap: 4px; }
+.pagination.pager-compact .page-numbers button { min-width: 36px; width: 36px; height: 36px; }
+.activity-feed-list.paged { min-height: 320px; }
+
 .quick-action-btn {
   width: 100%;
   padding: 14px;
