@@ -176,6 +176,7 @@ Object.assign(ConsignmentFlow, {
         await this.save(null, `${label} shot uploaded.`, () => this.uploadListingPhoto(i, type, file));
       });
     });
-  },
+      },
+  });
 
 ConsignmentFlow.pages['consignment-photo'] = ['renderPhoto', 'bindPhoto'];

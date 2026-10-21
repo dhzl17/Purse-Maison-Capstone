@@ -174,3 +174,26 @@ function renderUniversalSearchBar(inputId, placeholder = 'Search by ID, Brand, N
   `;
 }
 
+function buildPageList(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  if (current <= 3) return [1, 2, 3, 4, '…', total];
+  if (current >= total - 2) return [1, '…', total - 3, total - 2, total - 1, total];
+  return [1, '…', current - 1, current, current + 1, '…', total];
+}
+
+function renderPaginationButtons(current, total) {
+  const numbers = buildPageList(current, total).map((p) => (
+    p === '…'
+      ? '<span class="page-ellipsis">…</span>'
+      : `<button class="${p === current ? 'active' : ''}" data-page="${p}">${p}</button>`
+  )).join('');
+
+  return `
+    <button class="page-nav page-nav-prev" ${current === 1 ? 'disabled' : ''} data-page="${current - 1}">
+      <span class="page-nav-arrow">⟵</span><span class="page-nav-label">Previous</span>
+    </button>
+    <div class="page-numbers">${numbers}</div>
+    <button class="page-nav page-nav-next" ${current === total ? 'disabled' : ''} data-page="${current + 1}">
+      <span class="page-nav-label">Next</span><span class="page-nav-arrow">⟶</span>
+    </button>`;
+}

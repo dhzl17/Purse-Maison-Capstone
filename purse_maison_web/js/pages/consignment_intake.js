@@ -69,6 +69,8 @@ const ConsignmentFlow = {
   overviewSearch: '',
   overviewSort: 'recently',
   overviewStage: 'all',
+  overviewPage: 1,
+  overviewPageSize: 10,
   photoUrls: {},
 
   /** route -> [render method, bind method]. Other files add their pages here (e.g. consignment_auth.js). */
@@ -306,6 +308,11 @@ const ConsignmentFlow = {
     else if (this.overviewSort === 'price-low') list.sort((a, b) => priceOf(a) - priceOf(b));
     else list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
+    const totalPages = Math.max(1, Math.ceil(list.length / this.overviewPageSize));
+    this.overviewPage = Math.min(Math.max(1, this.overviewPage), totalPages);
+    const pageStart = (this.overviewPage - 1) * this.overviewPageSize;
+    const pageList = list.slice(pageStart, pageStart + this.overviewPageSize);
+
     const stagesPresent = STAGE_ORDER.filter((s) => DB.pipelineItems.some((i) => i.stage === s));
     const canStart = Session.canAccess('consignment-preintake');
 
@@ -326,31 +333,34 @@ const ConsignmentFlow = {
         ${canStart ? '<button class="btn-add" id="cons-new-inquiry">+ New Inquiry</button>' : ''}
       </div>
       <div class="table-scroll">
-        <table class="data-table">
+        <table class="data-table overview-table">
           <thead><tr>
-            <th style="text-align:center;">Item ID</th><th style="text-align:center;">Brand</th><th style="text-align:center;">Details</th>
-            <th style="text-align:center;">Consignor</th><th style="text-align:center;">Stage</th><th style="text-align:center;">Authentication</th>
-            <th style="text-align:center;">Price</th><th style="text-align:center;">Last Update</th><th style="text-align:center;">History</th>
+            <th class="ov-id">Item ID</th><th class="ov-brand">Brand</th><th class="ov-details">Details</th>
+            <th class="ov-consignor">Consignor</th><th class="ov-stage">Stage</th><th class="ov-auth">Authentication</th>
+            <th class="ov-price">Price</th><th class="ov-updated">Last Update</th><th class="ov-history">History</th>
           </tr></thead>
           <tbody>
             ${list.length === 0 ? `<tr><td colspan="9" class="cell-muted" style="text-align:center; padding:24px;">${DB.pipelineItems.length ? 'No items match your search.' : 'No consignment items yet.'}</td></tr>` :
-              list.map((i) => `
-              <tr style="text-align:center; vertical-align:middle;">
-                <td><strong>${escapeHtml(i.code)}</strong></td>
-                <td class="cell-bold">${escapeHtml(i.brand)}</td>
-                <td style="text-align:left;">
+              pageList.map((i) => `
+              <tr style="vertical-align:middle;">
+                <td class="ov-id"><strong>${escapeHtml(i.code)}</strong></td>
+                <td class="ov-brand cell-bold">${escapeHtml(i.brand)}</td>
+                <td class="ov-details">
                   <div style="font-weight:600;">${escapeHtml(this.itemName(i))}</div>
                   <div class="cell-muted" style="font-size:11.5px;">${escapeHtml(i.category || '—')}${i.serial ? ` · SN ${escapeHtml(i.serial)}` : ''}</div>
                 </td>
-                <td>${escapeHtml(i.consignor.full_name)}</td>
-                <td>${this.stageBadge(i.stage)}</td>
-                <td>${this.authCell(i)}</td>
-                <td class="cell-bold">${i.price != null ? this.peso(i.price) : (i.askingPrice != null ? `<span class="cell-muted">Asking ${this.peso(i.askingPrice)}</span>` : '—')}</td>
-                <td style="font-size:12px;">${escapeHtml(this.fmtDate(i.updatedAt))}</td>
-                <td><button class="icon-btn" data-history="${i.id}" title="View activity log"><i class="fa-solid fa-clock-rotate-left"></i></button></td>
+                <td class="ov-consignor">${escapeHtml(i.consignor.full_name)}</td>
+                <td class="ov-stage">${this.stageBadge(i.stage)}</td>
+                <td class="ov-auth">${this.authCell(i)}</td>
+                <td class="ov-price cell-bold">${i.price != null ? this.peso(i.price) : (i.askingPrice != null ? `<span class="cell-muted">Asking ${this.peso(i.askingPrice)}</span>` : '—')}</td>
+                <td class="ov-updated" style="font-size:12px;">${escapeHtml(this.fmtDate(i.updatedAt))}</td>
+                <td class="ov-history"><button class="icon-btn" data-history="${i.id}" title="View activity log"><i class="fa-solid fa-clock-rotate-left"></i></button></td>
               </tr>`).join('')}
           </tbody>
         </table>
+      </div>
+      <div class="pagination" id="cons-overview-pagination">
+        ${renderPaginationButtons(this.overviewPage, totalPages)}
       </div>`;
   },
 
@@ -368,19 +378,22 @@ const ConsignmentFlow = {
       search.value = this.overviewSearch;
       search.addEventListener('input', debounce((e) => {
         this.overviewSearch = e.target.value;
+        this.overviewPage = 1;
         Router.rerender();
         const s = document.getElementById('cons-overview-search');
         if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
       }, 300));
     }
     const sort = document.getElementById('cons-overview-sort');
-    if (sort) sort.addEventListener('change', (e) => { this.overviewSort = e.target.value; Router.rerender(); });
+    if (sort) sort.addEventListener('change', (e) => { this.overviewSort = e.target.value; this.overviewPage = 1; Router.rerender(); });
     const stage = document.getElementById('cons-overview-stage');
-    if (stage) stage.addEventListener('change', (e) => { this.overviewStage = e.target.value; Router.rerender(); });
-    const add = document.getElementById('cons-new-inquiry');
-    if (add) add.addEventListener('click', () => Router.navigate('consignment-preintake'));
-    document.querySelectorAll('[data-history]').forEach((btn) => {
-      btn.addEventListener('click', () => this.showHistory(this.item(btn.dataset.history)));
+    if (stage) stage.addEventListener('change', (e) => { this.overviewStage = e.target.value; this.overviewPage = 1; Router.rerender(); });
+    const pager = document.getElementById('cons-overview-pagination');
+    if (pager) pager.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-page]');
+      if (!btn || btn.disabled) return;
+      this.overviewPage = parseInt(btn.dataset.page, 10);
+      Router.rerender();
     });
   },
 

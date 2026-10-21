@@ -125,35 +125,35 @@ const InventoryPage = {
       </div>
 
 <div class="table-scroll">
-        <table class="data-table">
+        <table class="data-table inventory-table">
           <thead>
             <tr>
-              <th style="text-align: center;">Item ID</th>
-              <th style="text-align: center;">Brand</th>
-              <th style="text-align: center;">Category</th>
-              <th style="text-align: center;">Condition</th>
-              <th style="text-align: center;">Status</th>
-              <th style="text-align: center;">Location</th>
-              <th style="text-align: center;">Date Added</th>
-              <th style="text-align: center;">Transaction Status</th>
-              <th style="text-align: center;">Price</th>
-              ${viewOnly ? '' : '<th style="text-align: center;">Actions</th>'}
+              <th class="col-id">Item ID</th>
+              <th class="col-brand">Brand</th>
+              <th class="col-category">Category</th>
+              <th class="col-condition">Condition</th>
+              <th class="col-status">Status</th>
+              <th class="col-location">Location</th>
+              <th class="col-date">Date Added</th>
+              <th class="col-txn">Transaction Status</th>
+              <th class="col-price">Price</th>
+              ${viewOnly ? '' : '<th class="col-actions" style="text-align: center;">Actions</th>'}
             </tr>
           </thead>
           <tbody>
             ${pageItems.length === 0 ? `<tr><td colspan="${viewOnly ? 9 : 10}" class="cell-center cell-muted" style="padding:24px; text-align: center;">No inventory items match your search or filters.</td></tr>` :
               pageItems.map((item) => `
-              <tr style="text-align: center; vertical-align: middle;">
-                <td style="text-align: center; vertical-align: middle;">${escapeHtml(item.id)}</td>
-                <td class="cell-bold" style="text-align: center; vertical-align: middle;">${escapeHtml(item.brand)}</td>
-                <td style="text-align: center; vertical-align: middle;">${escapeHtml(item.category)}</td>
-                <td style="text-align: center; vertical-align: middle;">${escapeHtml(item.condition)}</td>
-                <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.statusBadge(item.status)}</td>
-                <td class="cell-center" style="text-align: center; vertical-align: middle;">${escapeHtml(item.location)}</td>
-                <td class="cell-center" style="text-align: center; vertical-align: middle;">${escapeHtml(item.dateAdded)}</td>
-                <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.transactionCell(item.transactionStatus)}</td>
-                <td class="cell-bold" style="text-align: center; vertical-align: middle;">${escapeHtml(item.price)}</td>
-                ${viewOnly ? '' : `<td style="text-align: center; vertical-align: middle;"><div class="row-actions" style="justify-content: center;">
+              <tr style="vertical-align: middle;">
+                <td class="col-id">${escapeHtml(item.id)}</td>
+                <td class="col-brand cell-bold">${escapeHtml(item.brand)}</td>
+                <td class="col-category">${escapeHtml(item.category)}</td>
+                <td class="col-condition">${escapeHtml(item.condition)}</td>
+                <td class="col-status">${this.statusBadge(item.status)}</td>
+                <td class="col-location">${escapeHtml(item.location)}</td>
+                <td class="col-date">${escapeHtml(item.dateAdded)}</td>
+                <td class="col-txn">${this.transactionCell(item.transactionStatus)}</td>
+                <td class="col-price cell-bold">${escapeHtml(item.price)}</td>
+                ${viewOnly ? '' : `<td class="col-actions" style="text-align: center; vertical-align: middle;"><div class="row-actions" style="justify-content: center;">
                   <button class="icon-btn" data-edit-inv="${item.id}" title="Edit">
                     <i class="fa-solid fa-pen"></i>
                   </button>
@@ -188,12 +188,7 @@ const InventoryPage = {
   },
 
   renderPagination(current, total) {
-    let html = `<button ${current === 1 ? 'disabled' : ''} data-page="${current - 1}">‹</button>`;
-    for (let p = 1; p <= total; p++) {
-      html += `<button class="${p === current ? 'active' : ''}" data-page="${p}">${p}</button>`;
-    }
-    html += `<button ${current === total ? 'disabled' : ''} data-page="${current + 1}">›</button>`;
-    return html;
+    return renderPaginationButtons(current, total);
   },
 
   afterRender() {

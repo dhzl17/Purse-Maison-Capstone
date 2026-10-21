@@ -67,7 +67,6 @@ img { max-width: 100%; display: block; }
   box-sizing: border-box;
 }
 
-/* Central Gold Logo */
 .landing-splash-logo-wrap {
   flex: 1;
   display: flex;
@@ -440,6 +439,128 @@ table.data-table td {
   vertical-align: middle;
 }
 table.data-table tbody tr:hover { background: #FAFAF7; }
+table.data-table.sales-table { table-layout: fixed; }
+table.data-table.sales-table-live { min-width: 1070px; }
+table.data-table.sales-table-open { min-width: 1050px; }
+table.data-table.sales-table-done { min-width: 910px; }
+table.data-table.sales-table-wd   { min-width: 970px; }
+
+.sales-table th,
+.sales-table td { overflow-wrap: break-word; }
+
+.sales-table .lv-id        { width: 100px; white-space: nowrap; overflow-wrap: normal; }
+.sales-table .lv-listing   { width: 290px; line-height: 1.45; }
+.sales-table .lv-price     { width: 130px; white-space: nowrap; }
+.sales-table .lv-payout    { width: 150px; white-space: nowrap; }
+.sales-table .lv-published { width: 110px; white-space: nowrap; }
+.sales-table .lv-contract  { width: 150px; }
+.sales-table .lv-actions   { width: 140px; }
+
+.sales-table .sl-id        { width: 110px; white-space: nowrap; overflow-wrap: normal; }
+.sales-table .sl-item      { width: 310px; line-height: 1.45; }
+.sales-table .sl-due       { width: 170px; }
+.sales-table .sl-payout    { width: 170px; }
+.sales-table .sl-status    { width: 150px; }
+.sales-table .sl-actions   { width: 140px; }
+
+.sales-table .wd-id        { width: 100px; white-space: nowrap; overflow-wrap: normal; }
+.sales-table .wd-item      { width: 280px; line-height: 1.45; }
+.sales-table .wd-reason    { width: 170px; }
+.sales-table .wd-since     { width: 130px; white-space: nowrap; }
+.sales-table .wd-fee       { width: 150px; }
+.sales-table .wd-actions   { width: 140px; }
+
+.sales-table .lv-id, .sales-table .lv-listing, .sales-table .lv-published,
+.sales-table .sl-id, .sales-table .sl-item,
+.sales-table .wd-id, .sales-table .wd-item, .sales-table .wd-reason, .sales-table .wd-since { text-align: left !important; }
+
+.sales-table .lv-price, .sales-table .lv-payout,
+.sales-table .sl-due, .sales-table .sl-payout,
+.sales-table .wd-fee { text-align: right !important; padding-right: 20px !important; }
+
+.sales-table .lv-contract, .sales-table .lv-actions,
+.sales-table .sl-status, .sales-table .sl-actions,
+.sales-table .wd-actions { text-align: center !important; }
+
+.sp-actions-wrap { display: flex; align-items: center; justify-content: center; }
+.row-menu { position: relative; display: inline-block; }
+.row-menu-toggle.manage-btn {
+  width: 104px; height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  border-radius: 8px; border: 1px solid var(--card-navy-dark); background: #fff;
+  color: var(--card-navy-dark); font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.row-menu-toggle.manage-btn:hover { background: var(--card-navy-dark); color: #fff; }
+.manage-chev { font-size: 10px; }
+
+.row-menu-panel {
+  position: fixed; z-index: 600; width: 250px; padding: 6px;
+  display: flex; flex-direction: column; gap: 2px;
+  background: #fff; border: 1px solid var(--border-light); border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(10, 18, 82, .18);
+}
+.row-menu-panel[hidden] { display: none; }
+.row-menu-item {
+  text-align: left; padding: 8px 12px; border: none; background: none; border-radius: 6px;
+  font-size: 13px; font-weight: 500; color: var(--text-dark); cursor: pointer;
+}
+.row-menu-item small { display: block; margin-top: 1px; font-size: 11px; font-weight: 400; color: var(--text-muted); }
+.row-menu-item:hover:not(.disabled) { background: var(--chip-bg); }
+.row-menu-item.primary { font-weight: 700; color: var(--card-navy-dark); }
+.row-menu-item.danger { color: var(--danger-red); }
+.row-menu-item.disabled { opacity: .5; cursor: not-allowed; }
+.row-menu-sep { height: 1px; margin: 5px 4px; background: var(--border-light); }
+table.data-table.inventory-table { table-layout: fixed; min-width: 1270px; }
+
+.inventory-table th,
+.inventory-table td { overflow-wrap: break-word; }
+
+.inventory-table .col-id        { width: 100px; white-space: nowrap; overflow-wrap: normal; }
+.inventory-table .col-brand     { width: 160px; }
+.inventory-table .col-category  { width: 130px; }
+.inventory-table .col-condition { width: 280px; line-height: 1.45; }
+.inventory-table .col-status    { width: 110px; }
+.inventory-table .col-location  { width: 110px; }
+.inventory-table .col-date      { width: 110px; white-space: nowrap; }
+.inventory-table .col-txn       { width: 150px; white-space: nowrap; }
+.inventory-table .col-price     { width: 120px; white-space: nowrap; }
+
+.inventory-table .col-id,
+.inventory-table .col-status,
+.inventory-table .col-date,
+.inventory-table .col-txn       { text-align: center !important; }
+
+.inventory-table .col-brand,
+.inventory-table .col-category,
+.inventory-table .col-condition,
+.inventory-table .col-location  { text-align: left !important; }
+
+.inventory-table .col-price     { text-align: right !important; padding-right: 20px !important; }
+table.data-table.overview-table { table-layout: fixed; min-width: 1390px; }
+
+.overview-table th,
+.overview-table td { overflow-wrap: break-word; }
+
+.overview-table .ov-id        { width: 100px; white-space: nowrap; overflow-wrap: normal; }
+.overview-table .ov-brand     { width: 150px; }
+.overview-table .ov-details   { width: 240px; line-height: 1.45; }
+.overview-table .ov-consignor { width: 150px; }
+.overview-table .ov-stage     { width: 210px; }
+.overview-table .ov-auth      { width: 150px; }
+.overview-table .ov-price     { width: 140px; white-space: nowrap; }
+.overview-table .ov-updated   { width: 170px; white-space: nowrap; }
+.overview-table .ov-history   { width: 80px; }
+
+.overview-table .ov-id,
+.overview-table .ov-stage,
+.overview-table .ov-auth,
+.overview-table .ov-updated,
+.overview-table .ov-history   { text-align: center !important; }
+
+.overview-table .ov-brand,
+.overview-table .ov-details,
+.overview-table .ov-consignor { text-align: left !important; }
+
+.overview-table .ov-price     { text-align: right !important; padding-right: 20px !important; }
 .cell-muted { color: var(--text-muted); }
 .cell-bold { font-weight: 600; }
 .cell-center { text-align: center; }
@@ -505,6 +626,36 @@ table.data-table tbody tr:hover { background: #FAFAF7; }
 }
 .pagination button.active { background: var(--card-navy-dark); color: #fff; border-color: var(--card-navy-dark); }
 .pagination button:disabled { opacity: .4; }
+
+.pagination { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; width: 100%; max-width: 100%; }
+.pagination .page-numbers { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.pagination .page-ellipsis { min-width: 20px; text-align: center; color: var(--text-muted); font-size: 13px; user-select: none; }
+
+.pagination .page-nav {
+  height: 36px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+  background: #fff;
+  color: var(--text-dark);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pagination .page-nav-prev { justify-self: start; }
+.pagination .page-nav-next { justify-self: end; }
+.pagination .page-nav:hover:not(:disabled) { background: var(--chip-bg); }
+.pagination .page-nav:disabled { cursor: not-allowed; }
+
+@media (max-width: 600px) {
+  .pagination { gap: 6px; }
+  .pagination .page-nav { padding: 0 10px; }
+  .pagination .page-nav-label { display: none; }
+}
 
 .view-all-link { text-align: center; margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--text-dark); background: none; border: none; display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; }
 
@@ -611,7 +762,24 @@ table.data-table tbody tr:hover { background: #FAFAF7; }
 .btn-danger { border-color: var(--danger-red); color: var(--danger-red); }
 .btn-danger:hover:not(:disabled) { background: var(--danger-red); color: #fff; }
 
-/* File inputs: crisp outline + matching outlined "Choose File" button */
+.sales-tab {
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1.5px solid var(--card-navy-dark);
+  background: #fff;
+  color: var(--card-navy-dark);
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.sales-tab:hover:not(.active) { background: var(--chip-bg); }
+.sales-tab.active {
+  background: #2D336A; 
+  border-color: #2D336A;
+  color: #fff;
+}
+
 .field-input[type="file"] {
   padding: 8px 10px;
   border: 1.5px solid var(--card-navy-dark);

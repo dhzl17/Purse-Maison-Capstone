@@ -14,6 +14,8 @@ const WITHDRAW_REASONS = ['Consignor request', 'Unsatisfied with pricing', 'Sold
 
 Object.assign(ConsignmentFlow, {
   salesTab: 'live',
+  salesPageSize: 6,
+  salesPage: { live: 1, sales: 1, done: 1, withdrawals: 1 },
 
   role() { return Session.currentUser && Session.currentUser.role; },
   canSell() { return ['salesAssociate', 'manager', 'superAdmin'].includes(this.role()); },
@@ -39,11 +41,66 @@ Object.assign(ConsignmentFlow, {
   },
 
   paidSoFar(sale) { return (sale.layaway_payments || []).reduce((s, p) => s + Number(p.amount || 0), 0); },
+  paginate(list, key) {
+    const size = this.salesPageSize;
+    const totalPages = Math.max(1, Math.ceil(list.length / size));
+    const page = Math.min(Math.max(1, this.salesPage[key] || 1), totalPages);
+    this.salesPage[key] = page;
+    return { items: list.slice((page - 1) * size, page * size), page, totalPages };
+  },
 
+  pagerHtml(key, pg) {
+    if (pg.totalPages <= 1) return '';
+    return `<div class="pagination" data-sales-pager="${key}">${renderPaginationButtons(pg.page, pg.totalPages)}</div>`;
+  },
   saleStatus(sale) {
     if (sale.payout_status === 'released') return badge('Payout released', 'success');
     if (sale.payment_status === 'verified') return badge('Payout pending', 'warning');
     return badge('Payment pending', 'info');
+  },
+
+
+  menuItem(label, attr, id, { primary = false, danger = false, disabledReason = '' } = {}) {
+    const off = !!disabledReason;
+    return `<button type="button" class="row-menu-item${primary ? ' primary' : ''}${danger ? ' danger' : ''}${off ? ' disabled' : ''}" ${attr}="${id}" ${off ? 'disabled' : ''}>${label}${off ? `<small>${escapeHtml(disabledReason)}</small>` : ''}</button>`;
+  },
+
+  rowMenu(items) {
+    if (!items.length) return '';
+    return `<div class="row-menu">
+      <button type="button" class="row-menu-toggle manage-btn" aria-haspopup="true">Manage <span class="manage-chev">▾</span></button>
+      <div class="row-menu-panel" hidden>${items.join('')}</div>
+    </div>`;
+  },
+
+  closeRowMenus() {
+    document.querySelectorAll('.row-menu-panel:not([hidden])').forEach((p) => { p.hidden = true; });
+  },
+
+  bindRowMenus() {
+    document.querySelectorAll('.row-menu-toggle').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const panel = btn.nextElementSibling;
+        const wasOpen = !panel.hidden;
+        this.closeRowMenus();
+        if (wasOpen) return;
+        panel.hidden = false;
+        const r = btn.getBoundingClientRect();
+        const w = panel.offsetWidth;
+        const h = panel.offsetHeight;
+        panel.style.left = `${Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8))}px`;
+        panel.style.top = `${r.bottom + h + 8 > window.innerHeight ? Math.max(8, r.top - h - 4) : r.bottom + 4}px`;
+      });
+    });
+
+    if (!this._rowMenuBound) {
+      this._rowMenuBound = true;
+      document.addEventListener('click', () => this.closeRowMenus());
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.closeRowMenus(); });
+      window.addEventListener('resize', () => this.closeRowMenus());
+      document.addEventListener('scroll', () => this.closeRowMenus(), true);
+    }
   },
 
   // ------------------------------------------------------------------ render
@@ -56,7 +113,7 @@ Object.assign(ConsignmentFlow, {
       .sort((a, b) => new Date(b.sale.payout_released_at) - new Date(a.sale.payout_released_at)).slice(0, 20);
     const withdrawals = DB.pipelineItems.filter((i) => i.withdrawal && i.withdrawal.status !== 'released');
     const expired = live.filter((i) => { const c = this.contractInfo(i); return c && c.left <= 0; }).length;
-    const tab = (key, label, n) => `<button class="${this.salesTab === key ? 'btn-confirm' : 'btn-secondary'}" data-sales-tab="${key}" style="padding:6px 14px;">${label} (${n})</button>`;
+        const tab = (key, label, n) => `<button type="button" class="sales-tab${this.salesTab === key ? ' active' : ''}" data-sales-tab="${key}" aria-pressed="${this.salesTab === key}">${label} (${n})</button>`;
 
     let body = '';
     if (this.salesTab === 'live') body = this.renderLiveListings(live);
@@ -75,88 +132,96 @@ Object.assign(ConsignmentFlow, {
   },
 
   renderLiveListings(list) {
-    const rows = list.map((i) => {
+    const pg = this.paginate(list, 'live');
+    const rows = pg.items.map((i) => {
       const c = this.contractInfo(i);
-      const actions = [];
-      if (this.canSell()) actions.push(`<button class="btn-confirm" data-sell="${i.id}" style="padding:4px 10px; font-size:11.5px;">Record Sale</button>`);
+      const items = [];
+      if (this.canSell()) items.push(this.menuItem('Record sale', 'data-sell', i.id, { primary: true }));
       if (this.canManageContract()) {
-        actions.push(`<button class="btn-secondary" data-extend="${i.id}" style="padding:4px 10px; font-size:11.5px;">Extend</button>`);
-        actions.push(`<button class="btn-secondary" data-withdraw="${i.id}" style="padding:4px 10px; font-size:11.5px; color:var(--danger-red);">Withdraw</button>`);
+        items.push(this.menuItem('Extend contract', 'data-extend', i.id));
+        items.push('<div class="row-menu-sep"></div>');
+        items.push(this.menuItem('Withdraw item', 'data-withdraw', i.id, { danger: true }));
       }
       return `
-        <tr style="text-align:center; vertical-align:middle;">
-          <td><strong>${escapeHtml(i.code)}</strong></td>
-          <td style="text-align:left;"><div style="font-weight:600;">${escapeHtml((i.listing && i.listing.title) || this.itemName(i))}</div><div class="cell-muted" style="font-size:11.5px;">${escapeHtml(i.consignor.full_name)}</div></td>
-          <td><strong>${this.peso(i.price)}</strong></td>
-          <td>${this.peso(i.consignorPayout)}</td>
-          <td style="font-size:12px;">${c ? escapeHtml(DataStore.formatMDY(i.listing.published_at)) : '—'}</td>
-          <td>${this.contractBadge(c)}${c ? `<div class="cell-muted" style="font-size:11px;">${c.days}-day term</div>` : ''}</td>
-          <td><div class="row-actions" style="justify-content:center; gap:6px; flex-wrap:wrap;">${actions.join('') || '<span class="cell-muted">View only</span>'}</div></td>
+        <tr style="vertical-align:middle;">
+          <td class="lv-id"><strong>${escapeHtml(i.code)}</strong></td>
+          <td class="lv-listing"><div style="font-weight:600;">${escapeHtml((i.listing && i.listing.title) || this.itemName(i))}</div><div class="cell-muted" style="font-size:11.5px;">${escapeHtml(i.consignor.full_name)}</div></td>
+          <td class="lv-price"><strong>${this.peso(i.price)}</strong></td>
+          <td class="lv-payout">${this.peso(i.consignorPayout)}</td>
+          <td class="lv-published" style="font-size:12px;">${c ? escapeHtml(DataStore.formatMDY(i.listing.published_at)) : '—'}</td>
+          <td class="lv-contract">${this.contractBadge(c)}${c ? `<div class="cell-muted" style="font-size:11px;">${c.days}-day term</div>` : ''}</td>
+          <td class="lv-actions"><div class="sp-actions-wrap">${this.rowMenu(items) || '<span class="cell-muted">View only</span>'}</div></td>
         </tr>`;
     }).join('');
     return `
-      <div class="table-scroll"><table class="data-table">
-        <thead><tr><th>Item ID</th><th>Listing</th><th>Price</th><th>Consignor Payout</th><th>Published</th><th>Contract</th><th>Actions</th></tr></thead>
+      <div class="table-scroll"><table class="data-table sales-table sales-table-live">
+        <thead><tr><th class="lv-id">Item ID</th><th class="lv-listing">Listing</th><th class="lv-price">Price</th><th class="lv-payout">Consignor Payout</th><th class="lv-published">Published</th><th class="lv-contract">Contract</th><th class="lv-actions">Actions</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="7" class="cell-muted" style="text-align:center; padding:18px;">No live listings. Items appear here after the manager publishes them.</td></tr>'}</tbody>
-      </table></div>`;
+      </table></div>${this.pagerHtml('live', pg)}`;
   },
 
   renderSalesTable(list, open) {
-    const rows = list.map((i) => {
+    const pg = this.paginate(list, open ? 'sales' : 'done');
+    const rows = pg.items.map((i) => {
       const s = i.sale;
       const layaway = s.sale_type === 'layaway';
       const paid = this.paidSoFar(s);
-      const actions = [];
-      if (open && layaway && s.payment_status !== 'verified' && this.canSell()) {
-        actions.push(`<button class="btn-secondary" data-installment="${i.id}" style="padding:4px 10px; font-size:11.5px;">Add Payment</button>`);
-      }
-      if (open && s.payment_status !== 'verified' && this.canVerify()) {
-        const ready = !layaway || paid >= Number(s.total_due);
-        actions.push(`<button class="btn-confirm" data-verify="${i.id}" style="padding:4px 10px; font-size:11.5px;${ready ? '' : ' opacity:.5;'}" ${ready ? '' : 'disabled title="Layaway not fully paid yet"'}>Verify Payment</button>`);
-      }
-      if (open && s.payment_status === 'verified' && this.canVerify()) {
-        actions.push(`<button class="btn-confirm" data-release="${i.id}" style="padding:4px 10px; font-size:11.5px;">Release Payout</button>`);
-      }
+      const ready = !layaway || paid >= Number(s.total_due);
+      const canAdd = open && layaway && s.payment_status !== 'verified' && this.canSell();
+      const canVerify = open && s.payment_status !== 'verified' && this.canVerify();
+      const canRelease = open && s.payment_status === 'verified' && this.canVerify();
+
+      const items = [];
+      if (canVerify && ready) items.push(this.menuItem('Verify payment', 'data-verify', i.id, { primary: true }));
+      if (canAdd) items.push(this.menuItem('Add layaway payment', 'data-installment', i.id, { primary: !(canVerify && ready) }));
+      if (canVerify && !ready) items.push(this.menuItem('Verify payment', 'data-verify', i.id, { disabledReason: 'Layaway not fully paid yet' }));
+      if (canRelease) items.push(this.menuItem('Release payout', 'data-release', i.id, { primary: true }));
+
       return `
-        <tr style="text-align:center; vertical-align:middle;">
-          <td><strong>${escapeHtml(i.code)}</strong><div class="cell-muted" style="font-size:11px;">${escapeHtml(DataStore.formatMDY(s.sold_at))}</div></td>
-          <td style="text-align:left;"><div style="font-weight:600;">${escapeHtml(this.itemName(i))}</div><div class="cell-muted" style="font-size:11.5px;">Buyer: ${escapeHtml(s.buyer_name)}${s.buyer_phone ? ` · ${escapeHtml(s.buyer_phone)}` : ''}</div></td>
-          <td>${layaway ? `Layaway · ${s.layaway_months} mo` : 'Full payment'}</td>
-          <td><strong>${this.peso(s.total_due)}</strong>${Number(s.layaway_interest) ? `<div class="cell-muted" style="font-size:11px;">incl. ${this.peso(s.layaway_interest)} interest</div>` : ''}
+        <tr style="vertical-align:middle;">
+          <td class="sl-id"><strong>${escapeHtml(i.code)}</strong><div class="cell-muted" style="font-size:11px;">${escapeHtml(DataStore.formatMDY(s.sold_at))}</div></td>
+          <td class="sl-item"><div style="font-weight:600;">${escapeHtml(this.itemName(i))}</div><div class="cell-muted" style="font-size:11.5px;">Buyer: ${escapeHtml(s.buyer_name)}${s.buyer_phone ? ` · ${escapeHtml(s.buyer_phone)}` : ''} · <strong>${layaway ? `Layaway · ${s.layaway_months} mo` : 'Full payment'}</strong></div></td>
+          <td class="sl-due"><strong>${this.peso(s.total_due)}</strong>${Number(s.layaway_interest) ? `<div class="cell-muted" style="font-size:11px;">incl. ${this.peso(s.layaway_interest)} interest</div>` : ''}
             ${layaway ? `<div style="font-size:11px; color:${paid >= Number(s.total_due) ? 'var(--green)' : 'var(--warning-amber)'};">Paid ${this.peso(paid)}</div>` : ''}</td>
-          <td>${this.peso(s.consignor_payout)}${s.payout_due_by && s.payout_status !== 'released' ? `<div class="cell-muted" style="font-size:11px;">due by ${escapeHtml(DataStore.formatMDY(s.payout_due_by + 'T12:00:00'))}</div>` : ''}</td>
-          <td>${this.saleStatus(s)}</td>
-          ${open ? `<td><div class="row-actions" style="justify-content:center; gap:6px; flex-wrap:wrap;">${actions.join('') || '<span class="cell-muted">—</span>'}</div></td>` : ''}
+          <td class="sl-payout">${this.peso(s.consignor_payout)}${s.payout_due_by && s.payout_status !== 'released' ? `<div class="cell-muted" style="font-size:11px;">due by ${escapeHtml(DataStore.formatMDY(s.payout_due_by + 'T12:00:00'))}</div>` : ''}</td>
+          <td class="sl-status">${this.saleStatus(s)}</td>
+          ${open ? `<td class="sl-actions"><div class="sp-actions-wrap">${this.rowMenu(items) || '<span class="cell-muted">—</span>'}</div></td>` : ''}
         </tr>`;
     }).join('');
     return `
-      <div class="table-scroll"><table class="data-table">
-        <thead><tr><th>Item ID</th><th>Item & Buyer</th><th>Type</th><th>Total Due</th><th>Consignor Payout</th><th>Status</th>${open ? '<th>Actions</th>' : ''}</tr></thead>
-        <tbody>${rows || `<tr><td colspan="${open ? 7 : 6}" class="cell-muted" style="text-align:center; padding:18px;">${open ? 'No open sales.' : 'No completed payouts yet.'}</td></tr>`}</tbody>
-      </table></div>`;
+      <div class="table-scroll"><table class="data-table sales-table ${open ? 'sales-table-open' : 'sales-table-done'}">
+        <thead><tr><th class="sl-id">Item ID</th><th class="sl-item">Item & Buyer</th><th class="sl-due">Total Due</th><th class="sl-payout">Consignor Payout</th><th class="sl-status">Status</th>${open ? '<th class="sl-actions">Actions</th>' : ''}</tr></thead>
+        <tbody>${rows || `<tr><td colspan="${open ? 6 : 5}" class="cell-muted" style="text-align:center; padding:18px;">${open ? 'No open sales.' : 'No completed payouts yet.'}</td></tr>`}</tbody>
+      </table></div>${this.pagerHtml(open ? 'sales' : 'done', pg)}`;
   },
 
   renderWithdrawals(list) {
-    const rows = list.map((i) => {
+    const pg = this.paginate(list, 'withdrawals');
+    const rows = pg.items.map((i) => {
       const w = i.withdrawal;
-      const actions = [];
-      if (this.canVerify() && !w.fee_paid) actions.push(`<button class="btn-secondary" data-fee-paid="${i.id}" style="padding:4px 10px; font-size:11.5px;">Mark Fee Paid</button>`);
-      if (this.canVerify()) actions.push(`<button class="btn-confirm" data-release-item="${i.id}" style="padding:4px 10px; font-size:11.5px;${w.fee_paid ? '' : ' opacity:.5;'}" ${w.fee_paid ? '' : 'disabled title="Pull-out fee not paid"'}>Release Item</button>`);
+      const items = [];
+      if (this.canVerify() && !w.fee_paid) items.push(this.menuItem('Mark fee paid', 'data-fee-paid', i.id, { primary: true }));
+      if (this.canVerify()) {
+        if (items.length) items.push('<div class="row-menu-sep"></div>');
+        items.push(this.menuItem('Release item', 'data-release-item', i.id,
+          w.fee_paid ? { primary: true } : { disabledReason: 'Pull-out fee not paid' }));
+      }
       return `
-        <tr style="text-align:center; vertical-align:middle;">
-          <td><strong>${escapeHtml(i.code)}</strong></td>
-          <td style="text-align:left;"><div style="font-weight:600;">${escapeHtml(this.itemName(i))}</div><div class="cell-muted" style="font-size:11.5px;">${escapeHtml(i.consignor.full_name)}</div></td>
-          <td>${escapeHtml(w.reason || '—')}</td>
-          <td>${w.days_since_posting == null ? '—' : `${w.days_since_posting} day(s)`}</td>
-          <td><strong>${this.peso(w.pull_out_fee)}</strong><div style="font-size:11px;">${w.fee_paid ? badge(Number(w.pull_out_fee) ? 'Paid' : 'No fee', 'success') : badge('Unpaid', 'danger')}</div></td>
-          <td><div class="row-actions" style="justify-content:center; gap:6px; flex-wrap:wrap;">${actions.join('') || '<span class="cell-muted">Waiting for manager</span>'}</div></td>
+        <tr style="vertical-align:middle;">
+          <td class="wd-id"><strong>${escapeHtml(i.code)}</strong></td>
+          <td class="wd-item"><div style="font-weight:600;">${escapeHtml(this.itemName(i))}</div><div class="cell-muted" style="font-size:11.5px;">${escapeHtml(i.consignor.full_name)}</div></td>
+          <td class="wd-reason">${escapeHtml(w.reason || '—')}</td>
+          <td class="wd-since">${w.days_since_posting == null ? '—' : `${w.days_since_posting} day(s)`}</td>
+                    <td class="wd-fee"><strong>${this.peso(w.pull_out_fee)}</strong><div style="font-size:11px; color:${w.fee_paid ? 'var(--green)' : 'var(--danger-red)'};">${w.fee_paid ? (Number(w.pull_out_fee) ? 'Paid' : 'No fee') : 'Unpaid'}</div></td>
+          <td class="wd-actions"><div class="sp-actions-wrap">${this.rowMenu(items) || '<span class="cell-muted">Waiting for manager</span>'}</div></td>
         </tr>`;
     }).join('');
     return `
-      <div class="table-scroll"><table class="data-table">
-        <thead><tr><th>Item ID</th><th>Item</th><th>Reason</th><th>Since Posting</th><th>Pull-out Fee</th><th>Actions</th></tr></thead>
+      <div class="table-scroll"><table class="data-table sales-table sales-table-wd">
+        <thead><tr><th class="wd-id">Item ID</th><th class="wd-item">Item</th><th class="wd-reason">Reason</th><th class="wd-since">Since Posting</th><th class="wd-fee">Pull-out Fee</th><th class="wd-actions">Actions</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="6" class="cell-muted" style="text-align:center; padding:18px;">No pending withdrawals.</td></tr>'}</tbody>
       </table></div>
+      ${this.pagerHtml('withdrawals', pg)}
       <p class="cell-muted" style="font-size:12px; margin-top:8px;">Releasing returns the item to the consignor and archives it.</p>`;
   },
 
@@ -168,7 +233,7 @@ Object.assign(ConsignmentFlow, {
       bodyHtml: `
         <div style="font-size:13px; margin-bottom:10px;"><strong>${escapeHtml((i.listing && i.listing.title) || this.itemName(i))}</strong> · ${this.peso(i.price)}</div>
         <div class="field-group"><label class="field-label">Buyer Name</label><input class="field-input" id="sale-buyer" required></div>
-        <div class="field-group"><label class="field-label">Buyer Phone (optional)</label><input class="field-input" id="sale-phone"></div>
+        <div class="field-group"><label class="field-label">Buyer Phone Number</label><input class="field-input" id="sale-phone"></div>
         <div class="field-group"><label class="field-label">Payment Type</label>
           <select class="field-input" id="sale-type">
             <option value="full_payment">Full payment</option>
@@ -198,8 +263,7 @@ Object.assign(ConsignmentFlow, {
         <div>Sale price: <strong>${this.peso(i.price)}</strong></div>
         ${lay ? `<div>Layaway interest: <strong>${this.peso(interest)}</strong>${m === 1 ? ' (waived for 1 month)' : ''}</div>` : ''}
         <div>Total due from buyer: <strong>${this.peso(i.price + interest)}</strong></div>
-        <div>Consignor payout: <strong>${this.peso(i.consignorPayout)}</strong> · Company commission: <strong>${this.peso(i.markup)}</strong></div>
-        <div class="cell-muted" style="margin-top:4px;">${lay ? 'The item is reserved until the installments cover the total.' : 'The item is marked Sold immediately; the manager then verifies the payment.'}</div>`;
+        <div>Consignor payout: <strong>${this.peso(i.consignorPayout)}</strong> · Company commission: <strong>${this.peso(i.markup)}</strong></div>`;
     };
     type.addEventListener('change', summary); months.addEventListener('change', summary); summary();
     overlay.querySelector('#sale-save').addEventListener('click', (e) => {
@@ -257,7 +321,7 @@ Object.assign(ConsignmentFlow, {
         <label style="display:flex; gap:8px; align-items:center; font-size:13px;"><input type="checkbox" id="ext-agreed"> The consignor agreed to this extension</label>
         <div class="modal-actions">
           <button class="btn-secondary" data-close-modal>Cancel</button>
-          <button class="btn-confirm" id="ext-save">Apply Extension</button>
+          <button class="btn-confirm" id="ext-save">Submit</button>
         </div>`,
     });
     overlay.querySelector('#ext-save').addEventListener('click', (e) => {
@@ -306,10 +370,19 @@ Object.assign(ConsignmentFlow, {
   },
 
   // -------------------------------------------------------------------- bind
-  bindSales() {
+    bindSales() {
     const all = (sel, fn) => document.querySelectorAll(sel).forEach((b) => b.addEventListener('click', () => fn(b)));
+    this.bindRowMenus();
+    document.querySelectorAll('[data-sales-pager]').forEach((pager) => {
+      pager.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-page]');
+        if (!btn || btn.disabled) return;
+        this.salesPage[pager.dataset.salesPager] = parseInt(btn.dataset.page, 10);
+        Router.rerender();
+      });
+    });
     all('[data-sales-tab]', (b) => { this.salesTab = b.dataset.salesTab; Router.rerender(); });
-    all('[data-sell]', (b) => this.openSaleModal(this.item(b.dataset.sell)));
+        all('[data-sell]', (b) => this.openSaleModal(this.item(b.dataset.sell)));
     all('[data-extend]', (b) => this.openExtendModal(this.item(b.dataset.extend)));
     all('[data-withdraw]', (b) => this.openWithdrawModal(this.item(b.dataset.withdraw)));
     all('[data-installment]', (b) => this.openInstallmentModal(this.item(b.dataset.installment)));

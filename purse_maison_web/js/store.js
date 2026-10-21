@@ -153,7 +153,7 @@ const DataStore = {
         id: it.item_code,
         brand: it.brand || '—',
         category: it.category || '—',
-        condition: notes ? (notes.length > 40 ? notes.slice(0, 40) + '…' : notes) : '—',
+                condition: notes || '—',
         status,
         location: this.locationOf(status),
         dateAdded: this.formatMDY(addedIso),
