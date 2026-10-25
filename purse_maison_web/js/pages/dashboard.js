@@ -3,14 +3,56 @@
  * js/store.js fills from Supabase after login.
  */
 
+const DASHBOARD_PERIODS = [[3, 'Last 3 Months'], [6, 'Last 6 Months'], [12, 'Last 12 Months']];
+
 const DashboardPage = {
+  filterPeriod: 6,     // months shown in the charts and period totals
+  filterBrand: 'all',  // brand key (lower-case brand name), or 'all'
+
+  /** Same key the database uses for brands (lower-case, trimmed). */
+  brandKeyOf(name) {
+    return String(name || '').trim().toLowerCase();
+  },
+
+  /** [brandKey, brand name] pairs from sales history and inventory, sorted by name. */
+  brandOptions() {
+    const map = new Map();
+    for (const s of DB.salesSeries) if (s.brandKey) map.set(s.brandKey, s.brand);
+    for (const i of DB.inventory) {
+      const k = this.brandKeyOf(i.brand);
+      if (k && k !== '—' && !map.has(k)) map.set(k, i.brand);
+    }
+    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  },
+
+  periodLabel() {
+    const found = DASHBOARD_PERIODS.find(([v]) => v === this.filterPeriod);
+    return found ? found[1] : `Last ${this.filterPeriod} Months`;
+  },
+
   computeStats() {
-    const inventory = DB.inventory;
-    const transactions = DB.salesTransactions; // verified sales in the system (used for display duration)
-    const salesSeries = DB.salesSeries;         // monthly revenue incl. imported history (totals and charts)
+    const brandOk = (name) => this.filterBrand === 'all' || this.brandKeyOf(name) === this.filterBrand;
+    const inventory = DB.inventory.filter((i) => brandOk(i.brand));
+    const salesSeries = DB.salesSeries.filter((s) => this.filterBrand === 'all' || s.brandKey === this.filterBrand); // monthly revenue incl. imported history
+
+    const months = lastNMonths(this.filterPeriod);
+    const monthLabels = months.map((m) => m.label);
+    const monthlyTotals = monthlySalesTotals(salesSeries, months);
+    const periodStart = new Date(months[0].year, months[0].month - 1, 1);
+    const periodTotal = monthlyTotals.reduce((a, b) => a + b, 0);
+    const periodUnits = salesSeries.filter((s) => s.date >= periodStart).reduce((sum, s) => sum + (s.units || 0), 0);
+
+    // Verified sales in the system, for the selected brand and period (used for display duration)
+    const inventoryById = Object.fromEntries(DB.inventory.map((i) => [i.id, i]));
+    const transactions = DB.salesTransactions.filter((t) => {
+      const item = inventoryById[t.itemId];
+      return item && brandOk(item.brand) && t.date >= periodStart;
+    });
 
     const itemsSold = inventory.filter((i) => i.status === 'sold').length;
-    const activeConsignedItems = DB.activeConsignedCount;
+    const activeConsignedItems = this.filterBrand === 'all'
+      ? DB.activeConsignedCount
+      : DB.pipelineItems.filter((i) => brandOk(i.brand) && !FINISHED_STAGES.includes(i.stage)).length;
 
     const now = new Date();
     const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -21,12 +63,9 @@ const DashboardPage = {
     }
     const growthPercent = lastMonthTotal === 0 ? 0 : ((thisMonthTotal - lastMonthTotal) / lastMonthTotal) * 100;
 
-    const inventoryById = Object.fromEntries(inventory.map((i) => [i.id, i]));
     const displayDurations = [];
     for (const t of transactions) {
-      if (!t.itemId) continue;
       const item = inventoryById[t.itemId];
-      if (!item) continue;
       const added = parseDateAdded(item.dateAdded);
       if (!added) continue;
       const days = Math.round((t.date - added) / 86400000);
@@ -37,10 +76,6 @@ const DashboardPage = {
     const slowMovingCount = displayDurations.filter((d) => d > 60).length;
     const turnoverRate = inventory.length ? itemsSold / inventory.length : 0;
 
-    const months = lastNMonths(6);
-    const monthLabels = months.map((m) => m.label);
-    const monthlyTotals = monthlySalesTotals(salesSeries, months);
-
     const statusCounts = {
       Available: inventory.filter((i) => i.status === 'available').length,
       Reserved: inventory.filter((i) => i.status === 'reserved').length,
@@ -48,11 +83,15 @@ const DashboardPage = {
       Sold: itemsSold,
     };
 
-    return { itemsSold, activeConsignedItems, thisMonthTotal, growthPercent, avgDisplayDuration, turnoverRate, totalInquiries: DB.inquiryCount, fastMovingCount, slowMovingCount, monthLabels, monthlyTotals, statusCounts };
+    return { itemsSold, activeConsignedItems, thisMonthTotal, growthPercent, periodTotal, periodUnits, avgDisplayDuration, turnoverRate, totalInquiries: DB.inquiryCount, fastMovingCount, slowMovingCount, monthLabels, monthlyTotals, statusCounts };
   },
 
   buildInsights(stats) {
     const insights = [];
+    if (this.filterBrand !== 'all') {
+      const found = this.brandOptions().find(([k]) => k === this.filterBrand);
+      insights.push(`Showing ${found ? found[1] : this.filterBrand} only (${this.periodLabel().toLowerCase()}).`);
+    }
     if (stats.thisMonthTotal > 0 || stats.growthPercent !== 0) {
       const dir = stats.growthPercent >= 0 ? 'up' : 'down';
       insights.push(`Sales revenue is ${dir} ${Math.abs(stats.growthPercent).toFixed(1)}% compared to last month.`);
@@ -69,6 +108,9 @@ const DashboardPage = {
   },
 
   render() {
+    const brands = this.brandOptions();
+    if (this.filterBrand !== 'all' && !brands.some(([k]) => k === this.filterBrand)) this.filterBrand = 'all';
+    const filtered = this.filterBrand !== 'all' || this.filterPeriod !== 6;
     const stats = this.computeStats();
     const insights = this.buildInsights(stats);
     const user = Session.currentUser;
@@ -82,18 +124,31 @@ const DashboardPage = {
         <span class="role-badge-tag" style="background:${roleConfig.badgeColor}; font-size:12px; padding:6px 14px;">
           ${escapeHtml(roleConfig.label)}
         </span>
+            </div>
+
+      <div class="filter-toolbar-row">
+        <div class="filter-controls-group">
+          <select class="sort-select" id="dashboard-period" aria-label="Period">
+            ${DASHBOARD_PERIODS.map(([v, l]) => `<option value="${v}" ${this.filterPeriod === v ? 'selected' : ''}>Period: ${l}</option>`).join('')}
+          </select>
+          <select class="sort-select" id="dashboard-brand" aria-label="Brand">
+            <option value="all">Brand: All Brands</option>
+            ${brands.map(([k, name]) => `<option value="${escapeHtml(k)}" ${this.filterBrand === k ? 'selected' : ''}>Brand: ${escapeHtml(name)}</option>`).join('')}
+          </select>
+        </div>
+        ${filtered ? '<button type="button" class="btn-secondary" id="dashboard-reset-filters" style="padding:6px 14px; font-size:12.5px;">Reset Filters</button>' : ''}
       </div>
 
       <div class="stat-grid">
-        <div class="stat-card"><div class="stat-title">Total Sales</div><div class="stat-value-row"><span class="stat-prefix">₱</span><span class="stat-value">${formatAmount(stats.thisMonthTotal)}</span></div></div>
-        <div class="stat-card"><div class="stat-title">Number of Items Sold</div><div class="stat-value-row"><span class="stat-value">${stats.itemsSold}</span></div></div>
+        <div class="stat-card"><div class="stat-title">Total Sales (${escapeHtml(this.periodLabel())})</div><div class="stat-value-row"><span class="stat-prefix">₱</span><span class="stat-value">${formatAmount(stats.periodTotal)}</span></div></div>
+        <div class="stat-card"><div class="stat-title">Items Sold (${escapeHtml(this.periodLabel())})</div><div class="stat-value-row"><span class="stat-value">${stats.periodUnits}</span></div></div>
         <div class="stat-card"><div class="stat-title">Active Consigned Items</div><div class="stat-value-row"><span class="stat-value">${stats.activeConsignedItems}</span></div></div>
         <div class="stat-card"><div class="stat-title">Monthly Sales Growth</div><div class="stat-value-row">${stats.growthPercent >= 0 ? '<span class="stat-trend">↑</span>' : ''}<span class="stat-value">${stats.growthPercent.toFixed(1)}%</span></div></div>
       </div>
 
       <div class="chart-row">
         <div class="chart-card">
-          <div class="chart-card-title"><span>Sales Overview</span><span class="period-chip">6 Months</span></div>
+          <div class="chart-card-title"><span>Sales Overview</span><span class="period-chip">${this.filterPeriod} Months</span></div>
           <div class="chart-canvas-wrap"><canvas id="chart-sales-overview"></canvas></div>
         </div>
         <div class="chart-card">
@@ -122,7 +177,7 @@ const DashboardPage = {
           <div class="chart-canvas-wrap short"><canvas id="chart-inventory-performance"></canvas></div>
         </div>
         <div class="chart-card col-wide">
-          <div class="chart-card-title"><span>Actual vs 6-Month Average</span><span class="period-chip">6 Months</span></div>
+          <div class="chart-card-title"><span>Actual vs ${this.filterPeriod}-Month Average</span><span class="period-chip">${this.filterPeriod} Months</span></div>
           <div class="chart-canvas-wrap short"><canvas id="chart-actual-vs-average"></canvas></div>
         </div>
         <div class="key-insights col-narrow">
@@ -133,7 +188,21 @@ const DashboardPage = {
     `;
   },
 
-  afterRender() {
+    afterRender() {
+    document.getElementById('dashboard-period')?.addEventListener('change', (e) => {
+      this.filterPeriod = parseInt(e.target.value, 10) || 6;
+      Router.rerender();
+    });
+    document.getElementById('dashboard-brand')?.addEventListener('change', (e) => {
+      this.filterBrand = e.target.value;
+      Router.rerender();
+    });
+    document.getElementById('dashboard-reset-filters')?.addEventListener('click', () => {
+      this.filterPeriod = 6;
+      this.filterBrand = 'all';
+      Router.rerender();
+    });
+
     const stats = this.computeStats();
     DataStore.refreshIfStale();
 

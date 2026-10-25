@@ -6,6 +6,8 @@
 
 const ForecastingPage = {
   selectedBrand: 'all',
+  selectedTrend: 'all',   
+  selectedMonths: 'all',
   page: 1,
   pageSize: 6,
   alertPage: 1,
@@ -17,12 +19,87 @@ const ForecastingPage = {
     return badge(label, tone);
   },
 
-  visibleRows() {
-    const all = DB.salesForecasts;
-    return this.selectedBrand === 'all' ? all : all.filter((f) => f.brandKey === this.selectedBrand);
+    /** How many forecast months are shown (the full forecast unless a shorter period is picked). */
+  monthsShown() {
+    const max = DB.forecastMeta.horizon || 0;
+    return this.selectedMonths === 'all' ? max : Math.min(Number(this.selectedMonths) || max, max);
   },
 
-  // Matches the database rule: only managers and owners may request a forecast run.
+  /** Shorter forecast periods to offer (the full forecast is always the last choice). */
+  monthOptions() {
+    const max = DB.forecastMeta.horizon || 0;
+    return [3, 6, 12].filter((n) => n < max);
+  },
+
+  /**
+   * Brand summaries for the first n forecast months. Uses the same rules as store.js:
+   * historical = the same number of months just before the forecast starts, and growth
+   * beyond +/-GROWTH_STABLE_BAND % counts as increasing or decreasing.
+   */
+  summaryFor(n) {
+    if (!n || n >= (DB.forecastMeta.horizon || 0)) return DB.salesForecasts;
+    return DB.salesForecasts.map((f) => {
+      const rows = DB.forecastRows.filter((r) => r.brandKey === f.brandKey)
+        .sort((a, b) => a.month - b.month)
+        .slice(0, n);
+      if (!rows.length) return f;
+      const first = rows[0].month;
+      const histStart = new Date(first.getFullYear(), first.getMonth() - rows.length, 1);
+      const historical = DB.salesSeries
+        .filter((s) => s.brandKey === f.brandKey && s.date >= histStart && s.date < first)
+        .reduce((sum, s) => sum + s.amount, 0);
+      const projected = rows.reduce((sum, r) => sum + r.revenue, 0);
+      const growth = historical > 0 ? Math.round(((projected - historical) / historical) * 1000) / 10 : null;
+      let trend = 'stable';
+      if (growth !== null && growth > GROWTH_STABLE_BAND) trend = 'increasing';
+      else if (growth !== null && growth < -GROWTH_STABLE_BAND) trend = 'decreasing';
+      return Object.assign({}, f, {
+        months: rows.length,
+        historicalValue: historical,
+        projectedValue: projected,
+        historicalSales: formatAmount(historical),
+        projectedSales: formatAmount(projected),
+        projectedGrowthPercent: growth,
+        trend,
+      });
+    });
+  },
+
+  /** Brands that match every filter, highest projected sales first. */
+  visibleRows() {
+    return this.summaryFor(this.monthsShown())
+      .filter((f) => this.selectedBrand === 'all' || f.brandKey === this.selectedBrand)
+      .filter((f) => this.selectedTrend === 'all' || f.trend === this.selectedTrend)
+      .sort((a, b) => b.projectedValue - a.projectedValue);
+  },
+
+  visibleAlerts(rows) {
+    if (!this.hasActiveFilter()) return DB.predictionAlerts;
+    const meta = DB.forecastMeta;
+    const when = meta.generatedAt ? DataStore.formatDateTime(meta.generatedAt) : '';
+    const alerts = [];
+    for (const s of rows) {
+      if (s.projectedGrowthPercent === null) continue;
+      if (s.projectedGrowthPercent >= ALERT_GROWTH_PERCENT) {
+        alerts.push(`Demand for ${s.brand} is projected to rise ${s.projectedGrowthPercent}% over the next ${s.months} months.`);
+      } else if (s.projectedGrowthPercent <= -ALERT_GROWTH_PERCENT) {
+        alerts.push(`Demand for ${s.brand} is projected to fall ${Math.abs(s.projectedGrowthPercent)}% over the next ${s.months} months. Consider reducing inventory.`);
+      }
+    }
+    if (meta.skipped && meta.skipped.length) {
+      const names = meta.skipped.map((k) => k.brand).sort((a, b) => a.localeCompare(b));
+      alerts.push(`${names.length} brand(s) were not forecast because they had too few months with sales: ${names.join(', ')}.`);
+    }
+    if (meta.latestRun && meta.latestRun.status === 'failed') {
+      alerts.push(`The last forecast run failed: ${meta.latestRun.error_message || 'no details recorded'}.`);
+    }
+    return alerts.map((description, i) => ({ id: `pa-f-${i}`, description, timestamp: when }));
+  },
+
+  hasActiveFilter() {
+    return this.selectedBrand !== 'all' || this.selectedTrend !== 'all' || this.selectedMonths !== 'all';
+  },
+
   canRequestForecast() {
     const role = Session.currentUser && Session.currentUser.role;
     return role === 'superAdmin' || role === 'manager';
@@ -34,20 +111,23 @@ const ForecastingPage = {
   },
 
   render() {
+    if (this.selectedBrand !== 'all' && !DB.salesForecasts.some((f) => f.brandKey === this.selectedBrand)) this.selectedBrand = 'all';
+    if (this.selectedMonths !== 'all' && !this.monthOptions().includes(this.selectedMonths)) this.selectedMonths = 'all';
     const meta = DB.forecastMeta;
     const hasForecast = DB.salesForecasts.length > 0;
     const rows = this.visibleRows();
     const run = meta.latestRun;
-    const horizon = meta.horizon || 6;
+    const horizon = this.monthsShown() || meta.horizon || 6;
     const busy = this.runIsBusy();
 
     const totalPages = Math.max(1, Math.ceil(rows.length / this.pageSize));
     this.page = Math.min(Math.max(1, this.page), totalPages);
     const pageRows = rows.slice((this.page - 1) * this.pageSize, this.page * this.pageSize);
 
-    const alertPages = Math.max(1, Math.ceil(DB.predictionAlerts.length / this.alertPageSize));
+    const alerts = this.visibleAlerts(rows);
+    const alertPages = Math.max(1, Math.ceil(alerts.length / this.alertPageSize));
     this.alertPage = Math.min(Math.max(1, this.alertPage), alertPages);
-    const pageAlerts = DB.predictionAlerts.slice((this.alertPage - 1) * this.alertPageSize, this.alertPage * this.alertPageSize);
+    const pageAlerts = alerts.slice((this.alertPage - 1) * this.alertPageSize, this.alertPage * this.alertPageSize);
 
     const runBadge = run && run.status !== 'completed'
       ? ' ' + badge(run.status === 'failed' ? 'Last run failed' : run.status === 'running' ? 'Running now' : 'Queued',
@@ -70,6 +150,21 @@ const ForecastingPage = {
               ${DB.salesForecasts.map((f) => `<option value="${escapeHtml(f.brandKey)}" ${this.selectedBrand === f.brandKey ? 'selected' : ''}>${escapeHtml(f.brand)}</option>`).join('')}
             </select>
           </div>
+          <div class="field-group" style="margin-bottom:0;flex:1;min-width:180px;">
+            <label class="field-label">Trend</label>
+            <select class="field-input" id="forecast-trend">
+              ${[['all', 'All Trends'], ['increasing', 'Increasing'], ['stable', 'Stable'], ['decreasing', 'Decreasing']]
+                .map(([v, l]) => `<option value="${v}" ${this.selectedTrend === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field-group" style="margin-bottom:0;flex:1;min-width:180px;">
+            <label class="field-label">Forecast Period</label>
+            <select class="field-input" id="forecast-months" ${hasForecast ? '' : 'disabled'}>
+              ${this.monthOptions().map((n) => `<option value="${n}" ${String(this.selectedMonths) === String(n) ? 'selected' : ''}>Next ${n} Months</option>`).join('')}
+              <option value="all" ${this.selectedMonths === 'all' ? 'selected' : ''}>${meta.horizon ? `Next ${meta.horizon} Months` : 'All Months'}</option>
+            </select>
+          </div>
+          ${this.hasActiveFilter() ? '<button type="button" class="btn-secondary" id="forecast-reset-filters" style="height:44px;">Reset Filters</button>' : ''}
           ${this.canRequestForecast() ? `<button class="btn-confirm" id="btn-request-forecast" style="height:44px;" ${busy ? 'disabled' : ''}>${busy ? 'Forecast in progress…' : 'Request New Forecast'}</button>` : ''}
         </div>
         <div class="cell-muted" style="margin-top:12px;font-size:12.5px;">${statusLine}${runBadge}</div>
@@ -104,7 +199,7 @@ const ForecastingPage = {
             <table class="data-table forecast-table">
               <thead><tr><th class="fc-brand">Brand</th><th class="fc-hist">Historical (₱)</th><th class="fc-proj">Projected (₱)</th><th class="fc-growth">Growth %</th><th class="fc-trend">Trend</th><th class="fc-mae">Avg. Error (MAE)</th></tr></thead>
               <tbody>
-                ${rows.length === 0 ? `<tr><td colspan="6" class="cell-center cell-muted" style="padding:24px;text-align:center;">No forecast to show yet.</td></tr>` : pageRows.map((f) => {
+                ${rows.length === 0 ? `<tr><td colspan="6" class="cell-center cell-muted" style="padding:24px;text-align:center;">${hasForecast ? 'No brands match the selected filters.' : 'No forecast to show yet.'}</td></tr>` : pageRows.map((f) => {
                   const g = f.projectedGrowthPercent;
                   return `
                   <tr>
@@ -127,7 +222,7 @@ const ForecastingPage = {
             <div class="feed-item">
               <div class="feed-desc">${escapeHtml(a.description)}</div>
               <div class="feed-time">${escapeHtml(a.timestamp)}</div>
-            </div>`).join('') || '<p class="cell-muted">No alerts yet.</p>'}
+            </div>`).join('') || `<p class="cell-muted">${this.hasActiveFilter() ? 'No alerts for the selected filters.' : 'No alerts yet.'}</p>`}
           ${alertPages > 1 ? `<div class="pagination" id="alerts-pagination">${renderPaginationButtons(this.alertPage, alertPages)}</div>` : ''}
         </div>
       </div>
@@ -138,6 +233,27 @@ const ForecastingPage = {
     document.getElementById('forecast-brand')?.addEventListener('change', (e) => {
       this.selectedBrand = e.target.value;
       this.page = 1;
+      this.alertPage = 1;
+      Router.rerender();
+    });
+    document.getElementById('forecast-trend')?.addEventListener('change', (e) => {
+      this.selectedTrend = e.target.value;
+      this.page = 1;
+      this.alertPage = 1;
+      Router.rerender();
+    });
+    document.getElementById('forecast-months')?.addEventListener('change', (e) => {
+      this.selectedMonths = e.target.value === 'all' ? 'all' : parseInt(e.target.value, 10);
+      this.page = 1;
+      this.alertPage = 1;
+      Router.rerender();
+    });
+    document.getElementById('forecast-reset-filters')?.addEventListener('click', () => {
+      this.selectedBrand = 'all';
+      this.selectedTrend = 'all';
+      this.selectedMonths = 'all';
+      this.page = 1;
+      this.alertPage = 1;
       Router.rerender();
     });
     document.getElementById('forecast-pagination')?.addEventListener('click', (e) => {
@@ -156,11 +272,10 @@ const ForecastingPage = {
 
     this.drawTrendChart();
 
-    // Historical vs projected, one pair of bars per brand
-    const all = DB.salesForecasts;
-    makeBarChart('chart-brand-forecast', all.map((f) => f.brand), [
-      { label: 'Historical', data: all.map((f) => f.historicalValue), backgroundColor: '#6C86FF', borderRadius: 2, maxBarThickness: 18 },
-      { label: 'Projected', data: all.map((f) => f.projectedValue), backgroundColor: '#10184F', borderRadius: 2, maxBarThickness: 18 },
+    const shown = this.visibleRows();
+    makeBarChart('chart-brand-forecast', shown.map((f) => f.brand), [
+      { label: 'Historical', data: shown.map((f) => f.historicalValue), backgroundColor: '#6C86FF', borderRadius: 2, maxBarThickness: 18 },
+      { label: 'Projected', data: shown.map((f) => f.projectedValue), backgroundColor: '#10184F', borderRadius: 2, maxBarThickness: 18 },
     ]);
 
     DataStore.refreshIfStale();
@@ -169,7 +284,12 @@ const ForecastingPage = {
   /** Last 6 months of actual sales, followed by the forecast months, as one timeline. */
   drawTrendChart() {
     const keyOf = (y, m) => `${y}-${m}`;
-    const brandOk = (b) => this.selectedBrand === 'all' || b === this.selectedBrand;
+    const visible = new Set(this.visibleRows().map((f) => f.brandKey));
+    const narrowed = this.selectedBrand !== 'all' || this.selectedTrend !== 'all';
+    const brandOk = (b) => (narrowed ? visible.has(b) : true);
+
+    const firstForecast = DB.forecastRows.reduce((min, r) => (!min || r.month < min ? r.month : min), null);
+    const cutoff = firstForecast ? new Date(firstForecast.getFullYear(), firstForecast.getMonth() + this.monthsShown(), 1) : null;
 
     const actualMonths = lastNMonths(6);
     const series = DB.salesSeries.filter((s) => brandOk(s.brandKey));
@@ -178,6 +298,7 @@ const ForecastingPage = {
     const forecastByKey = new Map();
     for (const r of DB.forecastRows) {
       if (!brandOk(r.brandKey)) continue;
+      if (cutoff && r.month >= cutoff) continue;
       const k = keyOf(r.month.getFullYear(), r.month.getMonth() + 1);
       forecastByKey.set(k, (forecastByKey.get(k) || 0) + r.revenue);
     }
