@@ -10,7 +10,14 @@
  * The page redraws only its own content area, so typing in the search box keeps focus.
  */
 
-const HELP_TICKET_URL = ''; // e.g. 'https://forms.example.com/purse-maison-support' once a ticket form exists
+const TICKET_CATEGORIES = [
+  ['bug', 'Something is not working'],
+  ['access', 'Access or permissions'],
+  ['data', 'Wrong or missing information'],
+  ['how_to', 'How do I…? question'],
+  ['other', 'Other'],
+];
+const TICKET_STATUSES = { open: ['Open', 'info'], in_progress: ['In Progress', 'warning'], resolved: ['Resolved', 'success'] };
 
 const HELP_CATEGORIES = [
   'Getting Started',
@@ -461,7 +468,10 @@ const HelpPage = {
   backView: 'home',  // where "Back" goes from an article
   query: '',
   lastQuery: '',     // restored when going back from an article opened from search results
-
+  tickets: null,     // support tickets this user can see (null = not loaded yet)
+  ticketsError: '',
+  ticketsLoading: false,
+  ticketFilter: 'open',
   // ------------------------------------------------------------ helpers
   rich(text) {
     return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
@@ -488,10 +498,6 @@ const HelpPage = {
     if (a.roles) return a.roles.includes(role);
     if (!a.routes || a.routes.length === 0) return true;
     return a.routes.some((r) => Session.canAccess(r));
-  },
-
-  ticketUrl() {
-    return /^https:\/\/\S+$/i.test(HELP_TICKET_URL) ? HELP_TICKET_URL : '';
   },
 
   matches(query) {
@@ -610,55 +616,206 @@ const HelpPage = {
   },
 
   ticketHtml() {
-    const url = this.ticketUrl();
     return `
       ${this.crumbs('Submit a Ticket')}
       <h2 class="help-view-title">Submit a Ticket</h2>
-      ${url ? `
-        <p class="help-view-sub">Report an issue or request assistance from the support team. The ticket form opens in a new tab.</p>
-        <a class="btn-confirm help-ticket-open" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Open ticket form <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a>` : `
-        <div class="help-callout">
-          <strong>Online ticket submission is not connected yet.</strong>
-          Purse Maison does not have a ticket form at the moment, so nothing is sent from this page.
-          Report the problem directly to the owner (Super Admin), who manages staff accounts and roles.
-        </div>`}
-      <h3 class="help-group-title">Include these details</h3>
-      <ol class="help-steps">
-        <li>The page you were on (its name in the sidebar), and the <strong>Item ID</strong> or client name if there is one.</li>
-        <li>What you clicked, what you expected, and what happened instead.</li>
-        <li>The exact message shown in the notice at the bottom-right of the screen, if any.</li>
-        <li>Your role (Settings → Account Settings → Role) and the time it happened.</li>
-        <li>A screenshot, if you can take one.</li>
-      </ol>
-      <h3 class="help-group-title">Before reporting, check</h3>
-      <div class="help-topic-card">
-        ${[this.article('roles-permissions'), this.article('navigating')].filter(Boolean).map((a) => this.topicRow(a)).join('')}
-        <button type="button" class="help-topic" data-help-view="faqs">
-          <span class="help-topic-text">
-            <span class="help-topic-title">Frequently Asked Questions</span>
-            <span class="help-topic-desc">Answers to common access, inventory, sales and forecasting questions.</span>
-          </span>
-          <i class="fa-solid fa-chevron-right help-topic-arrow" aria-hidden="true"></i>
-        </button>
-      </div>`;
+      <p class="help-view-sub">Report an issue or ask for help. The manager and owner will see your ticket and update its status. You may find a quicker answer in the <button type="button" class="help-link" data-help-view="faqs">FAQs</button>.</p>
+      <form class="help-ticket-form" id="help-ticket-form" novalidate>
+        <div class="help-form-grid">
+          <div class="field-group">
+            <label class="field-label" for="ticket-category">Category</label>
+            <select class="field-input" id="ticket-category" name="category">
+              ${TICKET_CATEGORIES.map(([v, l]) => `<option value="${v}">${escapeHtml(l)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="ticket-page">Page</label>
+            <select class="field-input" id="ticket-page" name="page">
+              ${this.ticketPageOptions().map((p) => `<option>${escapeHtml(p)}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="ticket-subject">Subject</label>
+          <input class="field-input" id="ticket-subject" name="subject" maxlength="120" placeholder="e.g. Record sale does nothing on PM-2044">
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="ticket-item">Item ID or client name (optional)</label>
+          <input class="field-input" id="ticket-item" name="item_ref" maxlength="80" placeholder="e.g. PM-2044">
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="ticket-description">Description</label>
+          <textarea class="field-input" id="ticket-description" name="description" rows="5" maxlength="2000" placeholder="What did you click, what did you expect, and what happened instead? Copy any message shown at the bottom-right of the screen."></textarea>
+        </div>
+        <button type="submit" class="btn-confirm" id="ticket-submit">Submit Ticket</button>
+      </form>
+      <div id="help-ticket-lists">${this.ticketListsHtml()}</div>`;
   },
 
-  roleTableHtml() {
-    const pages = [['dashboard', 'Dashboard']];
-    NAV_ITEMS.forEach((item) => {
-      if (item.children) item.children.forEach((c) => pages.push([c.route, c.label]));
-      else if (item.route !== 'dashboard') pages.push([item.route, item.label]);
-    });
+  // ------------------------------------------------------------ tickets
+  canManageTickets() {
+    const role = Session.currentUser && Session.currentUser.role;
+    return role === 'superAdmin' || role === 'manager';
+  },
+
+  ticketCode(t) {
+    return `TK-${String(t.id).padStart(4, '0')}`;
+  },
+
+  ticketCategoryLabel(value) {
+    const found = TICKET_CATEGORIES.find(([v]) => v === value);
+    return found ? found[1] : value;
+  },
+
+  ticketStatusBadge(status) {
+    const [label, tone] = TICKET_STATUSES[status] || [status, 'info'];
+    return badge(label, tone);
+  },
+
+  /** The pages this user can open (from the sidebar), plus a few general choices. */
+  ticketPageOptions() {
+    const pages = NAV_ITEMS.flatMap((n) => (n.children ? n.children : [n]))
+      .filter((n) => Session.canAccess(n.route))
+      .map((n) => n.label);
+    return [...pages, 'Help Center', 'Login page', 'Other'];
+  },
+
+  ticketListsHtml() {
+    if (this.tickets === null) return '<p class="cell-muted help-ticket-none">Loading tickets…</p>';
+    if (this.ticketsError) return `<div class="help-callout warn">Could not load tickets: ${escapeHtml(this.ticketsError)}</div>`;
+    const uid = Session.currentUser && Session.currentUser.uid;
+    const mine = this.tickets.filter((t) => t.created_by === uid);
+    let html = `
+      <h3 class="help-group-title">My Tickets</h3>
+      ${mine.length
+        ? `<div class="help-ticket-list">${mine.map((t) => this.ticketItem(t, false)).join('')}</div>`
+        : '<p class="cell-muted help-ticket-none">You have not submitted any tickets yet.</p>'}`;
+    if (this.canManageTickets()) {
+      const list = this.ticketFilter === 'all' ? this.tickets : this.tickets.filter((t) => t.status === this.ticketFilter);
+      html += `
+        <div class="help-section-head help-ticket-inbox-head">
+          <h3 class="help-group-title">Ticket Inbox</h3>
+          <select class="sort-select" id="ticket-filter" aria-label="Filter tickets by status">
+            ${[['open', 'Open'], ['in_progress', 'In Progress'], ['resolved', 'Resolved'], ['all', 'All tickets']]
+              .map(([v, l]) => `<option value="${v}" ${this.ticketFilter === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
+        ${list.length
+          ? `<div class="help-ticket-list">${list.map((t) => this.ticketItem(t, true)).join('')}</div>`
+          : '<p class="cell-muted help-ticket-none">No tickets with this status.</p>'}`;
+    }
+    return html;
+  },
+
+  ticketItem(t, manage) {
+    const author = (t.author && t.author.full_name) || 'Unknown';
+    const handler = t.handler && t.handler.full_name;
     return `
-      <div class="table-scroll help-role-table-wrap">
-        <table class="data-table help-role-table">
-          <thead><tr><th>Role</th><th>Pages this role can open</th></tr></thead>
-          <tbody>${Object.values(ROLES).map((r) => `
-            <tr><td class="cell-bold">${escapeHtml(r.label)}</td>
-                <td>${escapeHtml(pages.filter(([route]) => r.allowedRoutes.includes(route)).map(([, label]) => label).join(', '))}</td></tr>`).join('')}
-          </tbody>
-        </table>
-      </div>`;
+      <details class="help-faq help-ticket">
+        <summary>
+          <span class="help-ticket-sum">
+            <span class="help-ticket-title"><span class="help-ticket-code">${this.ticketCode(t)}</span>${escapeHtml(t.subject)}</span>
+            <span class="help-ticket-meta">${escapeHtml(this.ticketCategoryLabel(t.category))} · ${escapeHtml(t.page || '—')}${manage ? ` · ${escapeHtml(author)}` : ''} · ${escapeHtml(DataStore.formatDateTime(t.created_at))}</span>
+          </span>
+          <span class="help-ticket-right">${this.ticketStatusBadge(t.status)}<i class="fa-solid fa-chevron-down" aria-hidden="true"></i></span>
+        </summary>
+        <div class="help-faq-body">
+          ${t.item_ref ? `<p><strong>Item ID or client:</strong> ${escapeHtml(t.item_ref)}</p>` : ''}
+          <p class="help-ticket-desc">${escapeHtml(t.description)}</p>
+          ${t.resolution_note ? `<div class="help-ticket-reply"><strong>Response${handler ? ` from ${escapeHtml(handler)}` : ''}</strong>${escapeHtml(t.resolution_note)}</div>` : ''}
+          ${manage ? `
+            <div class="help-ticket-manage">
+              <div class="field-group">
+                <label class="field-label" for="ticket-status-${t.id}">Status</label>
+                <select class="field-input" id="ticket-status-${t.id}">
+                  ${Object.entries(TICKET_STATUSES).map(([v, [l]]) => `<option value="${v}" ${t.status === v ? 'selected' : ''}>${l}</option>`).join('')}
+                </select>
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="ticket-note-${t.id}">Response to ${escapeHtml(author)}</label>
+                <textarea class="field-input" id="ticket-note-${t.id}" rows="2" maxlength="1000">${escapeHtml(t.resolution_note || '')}</textarea>
+              </div>
+              <button type="button" class="btn-confirm" data-ticket-save="${t.id}">Save</button>
+            </div>` : ''}
+        </div>
+      </details>`;
+  },
+
+  drawTicketLists() {
+    const box = document.getElementById('help-ticket-lists');
+    if (box) box.innerHTML = this.ticketListsHtml();
+  },
+
+  async loadTickets() {
+    if (this.ticketsLoading) return;
+    this.ticketsLoading = true;
+    this.ticketsError = '';
+    try {
+      const { data, error } = await sbClient.from('support_tickets')
+        .select(`id, category, page, item_ref, subject, description, status, resolution_note, created_by, created_at,
+                 author:profiles!support_tickets_created_by_fkey(full_name),
+                 handler:profiles!support_tickets_handled_by_fkey(full_name)`)
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      this.tickets = data || [];
+    } catch (err) {
+      console.error('Loading tickets failed:', err);
+      this.tickets = [];
+      this.ticketsError = err.message || 'unknown error';
+    } finally {
+      this.ticketsLoading = false;
+    }
+    this.drawTicketLists();
+  },
+
+  async submitTicket(form) {
+    const fd = new FormData(form);
+    const subject = String(fd.get('subject') || '').trim();
+    const description = String(fd.get('description') || '').trim();
+    if (subject.length < 3) return showToast('Enter a subject (at least 3 characters).');
+    if (description.length < 10) return showToast('Describe the problem (at least 10 characters).');
+
+    const btn = form.querySelector('#ticket-submit');
+    btn.disabled = true;
+    try {
+      const { data, error } = await sbClient.from('support_tickets').insert({
+        category: fd.get('category'),
+        page: fd.get('page'),
+        item_ref: String(fd.get('item_ref') || '').trim() || null,
+        subject,
+        description,
+      }).select('id').single();
+      if (error) throw error;
+      form.reset();
+      showToast(`Ticket ${this.ticketCode(data)} submitted. You can follow it under My Tickets.`);
+      await this.loadTickets();
+    } catch (err) {
+      console.error('Submitting the ticket failed:', err);
+      showToast(`Could not submit the ticket: ${err.message || 'unknown error'}`);
+    } finally {
+      btn.disabled = false;
+    }
+  },
+
+  async updateTicket(id, btn) {
+    const status = document.getElementById(`ticket-status-${id}`).value;
+    const note = document.getElementById(`ticket-note-${id}`).value.trim();
+    btn.disabled = true;
+    try {
+      const { data, error } = await sbClient.from('support_tickets')
+        .update({ status, resolution_note: note || null })
+        .eq('id', id)
+        .select('id');
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error('Only the manager or owner can update tickets.');
+      showToast(`Ticket ${this.ticketCode({ id })} updated.`);
+      await this.loadTickets();
+    } catch (err) {
+      console.error('Updating the ticket failed:', err);
+      showToast(err.message || 'Could not update the ticket.');
+      btn.disabled = false;
+    }
   },
 
   articleHtml() {
@@ -738,6 +895,8 @@ const HelpPage = {
     this.backView = 'home';
     this.query = '';
     this.lastQuery = '';
+    this.tickets = null;
+    this.ticketsError = '';
     return `
       <div class="help-center" id="help-root">
         <h1 class="page-title help-title">Help Center</h1>
@@ -758,6 +917,7 @@ const HelpPage = {
     const main = document.getElementById('help-main');
     if (!main) return;
     main.innerHTML = this.mainHtml();
+    if (!this.query.trim() && this.view === 'ticket' && this.tickets === null) this.loadTickets();
     const status = document.getElementById('help-status');
     if (status) {
       const q = this.query.trim();
@@ -790,8 +950,12 @@ const HelpPage = {
       if (e.key === 'Escape' && input.value) { this.clearSearch(); this.redraw(false); }
     });
 
-    // One delegated listener for every link and button inside the Help Center.
     root.addEventListener('click', (e) => {
+      const save = e.target.closest('[data-ticket-save]');
+      if (save && root.contains(save)) {
+        this.updateTicket(Number(save.dataset.ticketSave), save);
+        return;
+      }
       const el = e.target.closest('[data-help-view], [data-help-article], [data-help-back], [data-help-go], [data-help-clear]');
       if (!el || !root.contains(el)) return;
 
@@ -830,6 +994,17 @@ const HelpPage = {
         this.clearSearch();
         this.redraw(true);
       }
+    });
+
+    root.addEventListener('submit', (e) => {
+      if (e.target.id !== 'help-ticket-form') return;
+      e.preventDefault();
+      this.submitTicket(e.target);
+    });
+    root.addEventListener('change', (e) => {
+      if (e.target.id !== 'ticket-filter') return;
+      this.ticketFilter = e.target.value;
+      this.drawTicketLists();
     });
   },
 };

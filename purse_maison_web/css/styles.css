@@ -1691,8 +1691,28 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 .help-link:focus-visible,
 .help-faq summary:focus-visible { outline: 3px solid var(--chart-blue-med); outline-offset: 2px; border-radius: 10px; }
 
+.help-ticket-form { background: #fff; border: 1px solid var(--border-light); border-radius: 16px; padding: 20px; margin-bottom: 8px; }
+.help-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.help-ticket-form textarea { resize: vertical; font-family: inherit; }
+.help-view-sub .help-link { font-size: inherit; }
+.help-ticket-list { display: flex; flex-direction: column; gap: 10px; }
+.help-ticket-none { font-size: 13px; margin-bottom: 4px; }
+.help-ticket-inbox-head { margin: 22px 0 10px; }
+.help-ticket-inbox-head .help-group-title { margin: 0; }
+.help-ticket summary { align-items: flex-start; }
+.help-ticket-sum { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.help-ticket-title { font-size: 14px; font-weight: 600; }
+.help-ticket-code { color: var(--text-muted); font-weight: 600; margin-right: 8px; }
+.help-ticket-meta { font-size: 12px; font-weight: 400; color: var(--text-muted); }
+.help-ticket-right { display: inline-flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.help-ticket-desc { white-space: pre-wrap; }
+.help-ticket-reply { margin: 10px 0; padding: 10px 14px; background: var(--chip-bg); border-radius: 10px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+.help-ticket-reply strong { display: block; margin-bottom: 2px; color: var(--card-navy-dark); }
+.help-ticket-manage { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light); }
+
 @media (max-width: 900px) {
   .help-quick-grid { grid-template-columns: 1fr; gap: 16px; }
   .help-quick-card { min-height: 0; }
   .help-topic-grid { grid-template-columns: 1fr; }
+  .help-form-grid { grid-template-columns: 1fr; }
 }
