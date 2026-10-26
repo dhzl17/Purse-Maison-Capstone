@@ -17,7 +17,7 @@ const TICKET_CATEGORIES = [
   ['how_to', 'How do I…? question'],
   ['other', 'Other'],
 ];
-const TICKET_STATUSES = { open: ['Open', 'info'], in_progress: ['In Progress', 'warning'], resolved: ['Resolved', 'success'] };
+const TICKET_STATUSES = { open: ['New', 'info'], in_progress: ['In Progress', 'warning'], resolved: ['Resolved', 'success'] };
 
 const HELP_CATEGORIES = [
   'Getting Started',
@@ -696,7 +696,7 @@ const HelpPage = {
         <div class="help-section-head help-ticket-inbox-head">
           <h3 class="help-group-title">Ticket Inbox</h3>
           <select class="sort-select" id="ticket-filter" aria-label="Filter tickets by status">
-            ${[['open', 'Open'], ['in_progress', 'In Progress'], ['resolved', 'Resolved'], ['all', 'All tickets']]
+            ${[['open', 'New'], ['in_progress', 'In Progress'], ['resolved', 'Resolved'], ['all', 'All tickets']]
               .map(([v, l]) => `<option value="${v}" ${this.ticketFilter === v ? 'selected' : ''}>${l}</option>`).join('')}
           </select>
         </div>
