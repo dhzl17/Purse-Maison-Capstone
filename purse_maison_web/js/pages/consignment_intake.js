@@ -41,6 +41,17 @@ const PRE_INTAKE_STAGES = ['customer_inquiry', 'lead_qualification', 'initial_ph
   'consignment_approval', 'appointment_scheduling', 'dropoff_pickup_courier'];
 const INTAKE_STAGES = ['dropoff_pickup_courier', 'arrivals_receiving', 'authentication_payment'];
 
+const OVERVIEW_STAGE_GROUPS = [
+  ['preintake', 'Inquiries & Pre-Intake', ['customer_inquiry', 'lead_qualification', 'initial_photo_submission', 'price_negotiation',
+    'consignment_approval', 'appointment_scheduling', 'dropoff_pickup_courier']],
+  ['intake', 'Intake & Agreements', ['arrivals_receiving', 'authentication_payment']],
+  ['auth', 'Authentication', ['authentication_service', 'authentication_process', 'authentication_certificate']],
+  ['media', 'Photography & Design', ['photography', 'photo_editing_approval', 'listing_creation']],
+  ['review', 'Approval & Pricing', ['manager_approval', 'pricing_markup']],
+  ['live', 'Live & Sold', ['publish_item', 'sold', 'archived']],
+  ['closed', 'Closed', ['closed_fake', 'closed_rejected']],
+];
+
 const LEAD_STATUSES = {
   new: 'New', qualified: 'Qualified', need_more_photos: 'Need More Photos',
   negotiation: 'Negotiation', rejected: 'Rejected', cancelled: 'Cancelled',
@@ -68,7 +79,7 @@ const ConsignmentFlow = {
   selected: { preintake: null, intake: null },
   overviewSearch: '',
   overviewSort: 'recently',
-  overviewStage: 'all',
+  overviewStages: null,
   overviewPage: 1,
   overviewPageSize: 10,
   photoUrls: {},
@@ -300,7 +311,10 @@ const ConsignmentFlow = {
       list = list.filter((i) => [i.code, i.brand, i.model, i.serial, i.microchip, i.consignor.full_name, STAGE_LABELS[i.stage]]
         .some((v) => String(v || '').toLowerCase().includes(kw)));
     }
-    if (this.overviewStage !== 'all') list = list.filter((i) => i.stage === this.overviewStage);
+    if (this.overviewStages !== null) {
+      const stages = new Set(this.overviewStages);
+      list = list.filter((i) => stages.has(i.stage));
+    }
     const priceOf = (i) => i.price ?? i.askingPrice ?? 0;
     if (this.overviewSort === 'oldest') list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     else if (this.overviewSort === 'alphabetical') list.sort((a, b) => this.itemName(a).localeCompare(this.itemName(b)));
@@ -314,17 +328,27 @@ const ConsignmentFlow = {
     const pageList = list.slice(pageStart, pageStart + this.overviewPageSize);
 
     const stagesPresent = STAGE_ORDER.filter((s) => DB.pipelineItems.some((i) => i.stage === s));
+    const stageGroups = OVERVIEW_STAGE_GROUPS
+      .map(([key, label, stages]) => ({
+        key,
+        label,
+        items: stages.filter((s) => stagesPresent.includes(s)).map((s) => ({ value: s, label: STAGE_LABELS[s] })),
+      }))
+      .filter((g) => g.items.length);
     const canStart = Session.canAccess('consignment-preintake');
 
     return `
       <h1 class="page-title">Consignment Management</h1>
       <div class="filter-toolbar-row">
         <div class="filter-controls-group">
-          ${renderUniversalSearchBar('cons-overview-search', 'Search by Item ID, Brand, Serial #, Consignor, Stage...')}
-          <select class="sort-select" id="cons-overview-stage">
-            <option value="all">All stages</option>
-            ${stagesPresent.map((s) => `<option value="${s}" ${this.overviewStage === s ? 'selected' : ''}>${STAGE_LABELS[s]}</option>`).join('')}
-          </select>
+          ${renderUniversalSearchBar('cons-overview-search', 'Search by Item ID, Brand...')}
+          ${renderTreeFilter('cons-overview-stage', {
+            label: 'Stage',
+            groups: stageGroups,
+            selected: this.overviewStages,
+            searchPlaceholder: 'Search stage',
+            emptyText: 'No consignment items yet.',
+          })}
           <select class="sort-select" id="cons-overview-sort">
             ${[['recently', 'Recently Added'], ['oldest', 'Oldest First'], ['price-high', 'Price High to Low'], ['price-low', 'Price Low to High'], ['alphabetical', 'Alphabetical A-Z']]
               .map(([v, l]) => `<option value="${v}" ${this.overviewSort === v ? 'selected' : ''}>Sort by: ${l}</option>`).join('')}
@@ -386,8 +410,7 @@ const ConsignmentFlow = {
     }
     const sort = document.getElementById('cons-overview-sort');
     if (sort) sort.addEventListener('change', (e) => { this.overviewSort = e.target.value; this.overviewPage = 1; Router.rerender(); });
-    const stage = document.getElementById('cons-overview-stage');
-    if (stage) stage.addEventListener('change', (e) => { this.overviewStage = e.target.value; this.overviewPage = 1; Router.rerender(); });
+    bindTreeFilter('cons-overview-stage', (stages) => { this.overviewStages = stages; this.overviewPage = 1; Router.rerender(); });
     const pager = document.getElementById('cons-overview-pagination');
     if (pager) pager.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-page]');

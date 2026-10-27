@@ -6,8 +6,8 @@
 const DASHBOARD_PERIODS = [[3, 'Last 3 Months'], [6, 'Last 6 Months'], [12, 'Last 12 Months']];
 
 const DashboardPage = {
-  filterPeriod: 6,     // months shown in the charts and period totals
-  filterBrand: 'all',  // brand key (lower-case brand name), or 'all'
+  filterPeriod: 6,     
+  filterBrands: null,
 
   /** Same key the database uses for brands (lower-case, trimmed). */
   brandKeyOf(name) {
@@ -31,9 +31,10 @@ const DashboardPage = {
   },
 
   computeStats() {
-    const brandOk = (name) => this.filterBrand === 'all' || this.brandKeyOf(name) === this.filterBrand;
+    const brandSet = this.filterBrands === null ? null : new Set(this.filterBrands);
+    const brandOk = (name) => brandSet === null || brandSet.has(this.brandKeyOf(name));
     const inventory = DB.inventory.filter((i) => brandOk(i.brand));
-    const salesSeries = DB.salesSeries.filter((s) => this.filterBrand === 'all' || s.brandKey === this.filterBrand); // monthly revenue incl. imported history
+    const salesSeries = DB.salesSeries.filter((s) => brandSet === null || brandSet.has(s.brandKey)); // monthly revenue incl. imported history
 
     const months = lastNMonths(this.filterPeriod);
     const monthLabels = months.map((m) => m.label);
@@ -50,7 +51,7 @@ const DashboardPage = {
     });
 
     const itemsSold = inventory.filter((i) => i.status === 'sold').length;
-    const activeConsignedItems = this.filterBrand === 'all'
+      const activeConsignedItems = brandSet === null
       ? DB.activeConsignedCount
       : DB.pipelineItems.filter((i) => brandOk(i.brand) && !FINISHED_STAGES.includes(i.stage)).length;
 
@@ -88,9 +89,10 @@ const DashboardPage = {
 
   buildInsights(stats) {
     const insights = [];
-    if (this.filterBrand !== 'all') {
-      const found = this.brandOptions().find(([k]) => k === this.filterBrand);
-      insights.push(`Showing ${found ? found[1] : this.filterBrand} only (${this.periodLabel().toLowerCase()}).`);
+    if (this.filterBrands !== null) {
+      const names = this.brandOptions().filter(([k]) => this.filterBrands.includes(k)).map(([, name]) => name);
+      const shown = names.length > 3 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} more` : names.join(', ');
+      insights.push(`Showing ${shown || 'no brands'} only (${this.periodLabel().toLowerCase()}).`);
     }
     if (stats.thisMonthTotal > 0 || stats.growthPercent !== 0) {
       const dir = stats.growthPercent >= 0 ? 'up' : 'down';
@@ -109,8 +111,11 @@ const DashboardPage = {
 
   render() {
     const brands = this.brandOptions();
-    if (this.filterBrand !== 'all' && !brands.some(([k]) => k === this.filterBrand)) this.filterBrand = 'all';
-    const filtered = this.filterBrand !== 'all' || this.filterPeriod !== 6;
+    if (this.filterBrands !== null) {
+      this.filterBrands = this.filterBrands.filter((k) => brands.some(([b]) => b === k));
+      if (!this.filterBrands.length) this.filterBrands = null;
+    }
+    const filtered = this.filterBrands !== null || this.filterPeriod !== 6;
     const stats = this.computeStats();
     const insights = this.buildInsights(stats);
     const user = Session.currentUser;
@@ -128,13 +133,20 @@ const DashboardPage = {
 
       <div class="filter-toolbar-row">
         <div class="filter-controls-group">
-          <select class="sort-select" id="dashboard-period" aria-label="Period">
-            ${DASHBOARD_PERIODS.map(([v, l]) => `<option value="${v}" ${this.filterPeriod === v ? 'selected' : ''}>Period: ${l}</option>`).join('')}
-          </select>
-          <select class="sort-select" id="dashboard-brand" aria-label="Brand">
-            <option value="all">Brand: All Brands</option>
-            ${brands.map(([k, name]) => `<option value="${escapeHtml(k)}" ${this.filterBrand === k ? 'selected' : ''}>Brand: ${escapeHtml(name)}</option>`).join('')}
-          </select>
+          ${renderTreeFilter('dashboard-period', {
+            label: 'Period',
+            items: DASHBOARD_PERIODS.map(([v, l]) => ({ value: v, label: l })),
+            selected: this.filterPeriod,
+            single: true,
+            defaultValue: 6,
+          })}
+          ${renderTreeFilter('dashboard-brand', {
+            label: 'Brand',
+            items: brands.map(([k, name]) => ({ value: k, label: name })),
+            selected: this.filterBrands,
+            searchPlaceholder: 'Search brand',
+            emptyText: 'No brands yet.',
+          })}
         </div>
         ${filtered ? '<button type="button" class="btn-secondary" id="dashboard-reset-filters" style="padding:6px 14px; font-size:12.5px;">Reset Filters</button>' : ''}
       </div>
@@ -189,17 +201,17 @@ const DashboardPage = {
   },
 
     afterRender() {
-    document.getElementById('dashboard-period')?.addEventListener('change', (e) => {
-      this.filterPeriod = parseInt(e.target.value, 10) || 6;
+    bindTreeFilter('dashboard-period', (value) => {
+      this.filterPeriod = parseInt(value, 10) || 6;
       Router.rerender();
     });
-    document.getElementById('dashboard-brand')?.addEventListener('change', (e) => {
-      this.filterBrand = e.target.value;
+    bindTreeFilter('dashboard-brand', (brandKeys) => {
+      this.filterBrands = brandKeys;
       Router.rerender();
     });
     document.getElementById('dashboard-reset-filters')?.addEventListener('click', () => {
       this.filterPeriod = 6;
-      this.filterBrand = 'all';
+      this.filterBrands = null;
       Router.rerender();
     });
 

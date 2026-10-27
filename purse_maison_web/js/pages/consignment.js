@@ -895,7 +895,7 @@ renderAuthenticationView() {
       
       <div class="filter-toolbar-row">
         <div class="filter-controls-group">
-          ${renderUniversalSearchBar('consignment-search-input', 'Search by ID, Brand, Name, Serial #, Consignor...')}
+          ${renderUniversalSearchBar('consignment-search-input', 'Search by ID, Brand...')}
           <select class="sort-select" id="consignment-sort-select">
             <option value="recently" ${this.sortBy === 'recently' ? 'selected' : ''}>Sort by: Recently Added (Default)</option>
             <option value="oldest" ${this.sortBy === 'oldest' ? 'selected' : ''}>Sort by: Oldest First</option>

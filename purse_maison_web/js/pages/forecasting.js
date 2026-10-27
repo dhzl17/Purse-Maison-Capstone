@@ -5,8 +5,8 @@
  */
 
 const ForecastingPage = {
-  selectedBrand: 'all',
-  selectedTrend: 'all',   
+  selectedBrands: null,
+  selectedTrends: null,   
   selectedMonths: 'all',
   page: 1,
   pageSize: 6,
@@ -68,8 +68,8 @@ const ForecastingPage = {
   /** Brands that match every filter, highest projected sales first. */
   visibleRows() {
     return this.summaryFor(this.monthsShown())
-      .filter((f) => this.selectedBrand === 'all' || f.brandKey === this.selectedBrand)
-      .filter((f) => this.selectedTrend === 'all' || f.trend === this.selectedTrend)
+      .filter((f) => this.selectedBrands === null || this.selectedBrands.includes(f.brandKey))
+      .filter((f) => this.selectedTrends === null || this.selectedTrends.includes(f.trend))
       .sort((a, b) => b.projectedValue - a.projectedValue);
   },
 
@@ -97,7 +97,7 @@ const ForecastingPage = {
   },
 
   hasActiveFilter() {
-    return this.selectedBrand !== 'all' || this.selectedTrend !== 'all' || this.selectedMonths !== 'all';
+    return this.selectedBrands !== null || this.selectedTrends !== null || this.selectedMonths !== 'all';
   },
 
   canRequestForecast() {
@@ -111,7 +111,10 @@ const ForecastingPage = {
   },
 
   render() {
-    if (this.selectedBrand !== 'all' && !DB.salesForecasts.some((f) => f.brandKey === this.selectedBrand)) this.selectedBrand = 'all';
+    if (this.selectedBrands !== null) {
+      this.selectedBrands = this.selectedBrands.filter((k) => DB.salesForecasts.some((f) => f.brandKey === k));
+      if (!this.selectedBrands.length) this.selectedBrands = null;
+    }
     if (this.selectedMonths !== 'all' && !this.monthOptions().includes(this.selectedMonths)) this.selectedMonths = 'all';
     const meta = DB.forecastMeta;
     const hasForecast = DB.salesForecasts.length > 0;
@@ -140,32 +143,35 @@ const ForecastingPage = {
     return `
       <h1 class="page-title">Sales Forecasting</h1>
 
-      <div class="card" style="margin-bottom:20px;">
-        <div class="card-title" style="margin-bottom:14px;">Forecast Status &amp; Filter</div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-          <div class="field-group" style="margin-bottom:0;flex:1;min-width:200px;">
-            <label class="field-label">Brand</label>
-            <select class="field-input" id="forecast-brand">
-              <option value="all">All Brands</option>
-              ${DB.salesForecasts.map((f) => `<option value="${escapeHtml(f.brandKey)}" ${this.selectedBrand === f.brandKey ? 'selected' : ''}>${escapeHtml(f.brand)}</option>`).join('')}
-            </select>
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-title" style="margin-bottom:14px;">Forecast Status &amp; Filter</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
+          <div class="filter-controls-group">
+            ${renderTreeFilter('forecast-brand', {
+              label: 'Brand',
+              items: DB.salesForecasts.map((f) => ({ value: f.brandKey, label: f.brand })),
+              selected: this.selectedBrands,
+              searchPlaceholder: 'Search brand',
+              emptyText: 'No forecast yet.',
+            })}
+            ${renderTreeFilter('forecast-trend', {
+              label: 'Trend',
+              items: [['increasing', 'Increasing'], ['stable', 'Stable'], ['decreasing', 'Decreasing']].map(([v, l]) => ({ value: v, label: l })),
+              selected: this.selectedTrends,
+            })}
+            ${hasForecast ? renderTreeFilter('forecast-months', {
+              label: 'Forecast Period',
+              items: [
+                ...this.monthOptions().map((n) => ({ value: n, label: `Next ${n} Months` })),
+                { value: 'all', label: meta.horizon ? `Next ${meta.horizon} Months` : 'All Months' },
+              ],
+              selected: this.selectedMonths,
+              single: true,
+              defaultValue: 'all',
+            }) : ''}
+            ${this.hasActiveFilter() ? '<button type="button" class="btn-secondary" id="forecast-reset-filters" style="padding:6px 14px; font-size:12.5px;">Reset Filters</button>' : ''}
           </div>
-          <div class="field-group" style="margin-bottom:0;flex:1;min-width:180px;">
-            <label class="field-label">Trend</label>
-            <select class="field-input" id="forecast-trend">
-              ${[['all', 'All Trends'], ['increasing', 'Increasing'], ['stable', 'Stable'], ['decreasing', 'Decreasing']]
-                .map(([v, l]) => `<option value="${v}" ${this.selectedTrend === v ? 'selected' : ''}>${l}</option>`).join('')}
-            </select>
-          </div>
-          <div class="field-group" style="margin-bottom:0;flex:1;min-width:180px;">
-            <label class="field-label">Forecast Period</label>
-            <select class="field-input" id="forecast-months" ${hasForecast ? '' : 'disabled'}>
-              ${this.monthOptions().map((n) => `<option value="${n}" ${String(this.selectedMonths) === String(n) ? 'selected' : ''}>Next ${n} Months</option>`).join('')}
-              <option value="all" ${this.selectedMonths === 'all' ? 'selected' : ''}>${meta.horizon ? `Next ${meta.horizon} Months` : 'All Months'}</option>
-            </select>
-          </div>
-          ${this.hasActiveFilter() ? '<button type="button" class="btn-secondary" id="forecast-reset-filters" style="height:44px;">Reset Filters</button>' : ''}
-          ${this.canRequestForecast() ? `<button class="btn-confirm" id="btn-request-forecast" style="height:44px;" ${busy ? 'disabled' : ''}>${busy ? 'Forecast in progress…' : 'Request New Forecast'}</button>` : ''}
+          ${this.canRequestForecast() ? `<button class="btn-confirm" id="btn-request-forecast" ${busy ? 'disabled' : ''}>${busy ? 'Forecast in progress…' : 'Request New Forecast'}</button>` : ''}
         </div>
         <div class="cell-muted" style="margin-top:12px;font-size:12.5px;">${statusLine}${runBadge}</div>
         ${hasForecast ? '' : `<div class="cell-muted" style="margin-top:8px;font-size:12.5px;">A forecast needs enough monthly sales history per brand (12 months or more). It will appear here once the client's historical sales are imported and the forecast job has run.</div>`}
@@ -230,27 +236,27 @@ const ForecastingPage = {
   },
 
   afterRender() {
-    document.getElementById('forecast-brand')?.addEventListener('change', (e) => {
-      this.selectedBrand = e.target.value;
+    bindTreeFilter('forecast-brand', (brandKeys) => {
+      this.selectedBrands = brandKeys;
       this.page = 1;
       this.alertPage = 1;
       Router.rerender();
     });
-    document.getElementById('forecast-trend')?.addEventListener('change', (e) => {
-      this.selectedTrend = e.target.value;
+    bindTreeFilter('forecast-trend', (trends) => {
+      this.selectedTrends = trends;
       this.page = 1;
       this.alertPage = 1;
       Router.rerender();
     });
-    document.getElementById('forecast-months')?.addEventListener('change', (e) => {
-      this.selectedMonths = e.target.value === 'all' ? 'all' : parseInt(e.target.value, 10);
+    bindTreeFilter('forecast-months', (value) => {
+      this.selectedMonths = value === 'all' ? 'all' : parseInt(value, 10);
       this.page = 1;
       this.alertPage = 1;
       Router.rerender();
     });
     document.getElementById('forecast-reset-filters')?.addEventListener('click', () => {
-      this.selectedBrand = 'all';
-      this.selectedTrend = 'all';
+      this.selectedBrands = null;
+      this.selectedTrends = null;
       this.selectedMonths = 'all';
       this.page = 1;
       this.alertPage = 1;
@@ -285,7 +291,7 @@ const ForecastingPage = {
   drawTrendChart() {
     const keyOf = (y, m) => `${y}-${m}`;
     const visible = new Set(this.visibleRows().map((f) => f.brandKey));
-    const narrowed = this.selectedBrand !== 'all' || this.selectedTrend !== 'all';
+    const narrowed = this.selectedBrands !== null || this.selectedTrends !== null;
     const brandOk = (b) => (narrowed ? visible.has(b) : true);
 
     const firstForecast = DB.forecastRows.reduce((min, r) => (!min || r.month < min ? r.month : min), null);

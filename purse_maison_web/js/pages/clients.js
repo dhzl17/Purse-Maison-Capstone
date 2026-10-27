@@ -84,7 +84,7 @@ const ClientsPage = {
 
       <div class="filter-toolbar-row" style="margin-bottom:14px;">
         <div class="filter-controls-group">
-          ${renderUniversalSearchBar('clients-search-input', 'Search by Name, Type, Source, Associate...')}
+          ${renderUniversalSearchBar('clients-search-input', 'Search by Name, Type...')}
           <select class="sort-select" id="clients-sort-select">
             <option value="recently" ${this.sortBy === 'recently' ? 'selected' : ''}>Sort: Recently Added</option>
             <option value="oldest" ${this.sortBy === 'oldest' ? 'selected' : ''}>Sort: Oldest First</option>

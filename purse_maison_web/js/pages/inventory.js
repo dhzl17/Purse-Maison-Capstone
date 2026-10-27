@@ -9,8 +9,8 @@ const InventoryPage = {
   currentPage: 1,
   searchKeyword: '',
   sortBy: 'recently',
-  filterTimeRange: 'all',
-  filterBrand: 'all',
+  filterMonths: null,  
+  filterBrands: null,
 
   statusBadge(status) {
     const map = {
@@ -39,26 +39,41 @@ const InventoryPage = {
     return `INV-${String(maxNum + 1).padStart(3, '0')}`;
   },
 
+  monthKeyOf(item) {
+    const d = parseDateAdded(item.dateAdded);
+    return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : null;
+  },
+
+  dateFilterGroups(items) {
+    const years = new Map();
+    for (const item of items) {
+      const key = this.monthKeyOf(item);
+      if (!key) continue;
+      const [y, m] = key.split('-');
+      if (!years.has(y)) years.set(y, new Set());
+      years.get(y).add(m);
+    }
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return [...years.keys()].sort((a, b) => b - a).map((y) => ({
+      key: y,
+      label: y,
+      items: [...years.get(y)].sort().map((m) => ({ value: `${y}-${m}`, label: monthNames[Number(m) - 1] })),
+    }));
+  },
+
   filterAndSortItems(items) {
     let list = [...items];
 
-    // Time range filter
-    if (this.filterTimeRange !== 'all') {
-      const now = new Date();
-      let cutoff;
-      if (this.filterTimeRange === '7d') cutoff = new Date(now - 7 * 86400000);
-      else if (this.filterTimeRange === 'month') cutoff = new Date(now.getFullYear(), now.getMonth(), 1);
-      else if (this.filterTimeRange === '3m') cutoff = new Date(now.getFullYear(), now.getMonth() - 3, 1);
-      else if (this.filterTimeRange === 'ytd') cutoff = new Date(now.getFullYear(), 0, 1);
-      if (cutoff) list = list.filter(i => { const d = parseDateAdded(i.dateAdded); return d && d >= cutoff; });
+    if (this.filterMonths !== null) {
+      const months = new Set(this.filterMonths);
+      list = list.filter((i) => months.has(this.monthKeyOf(i)));
     }
 
-    // Brand filter
-    if (this.filterBrand && this.filterBrand !== 'all') {
-      list = list.filter(i => i.brand === this.filterBrand);
+    if (this.filterBrands !== null) {
+      const brands = new Set(this.filterBrands);
+      list = list.filter(i => brands.has(i.brand));
     }
 
-    // Search filter
     if (this.searchKeyword) {
       const kw = this.searchKeyword.toLowerCase();
       list = list.filter(i =>
@@ -101,18 +116,21 @@ const InventoryPage = {
 
       <div class="filter-toolbar-row">
         <div class="filter-controls-group">
-          ${renderUniversalSearchBar('inventory-search-input', 'Search by ID, Brand, Category, Location...')}
-          <select class="filter-select" id="inventory-time-filter">
-            <option value="all" ${this.filterTimeRange === 'all' ? 'selected' : ''}>All Time</option>
-            <option value="7d" ${this.filterTimeRange === '7d' ? 'selected' : ''}>Last 7 Days</option>
-            <option value="month" ${this.filterTimeRange === 'month' ? 'selected' : ''}>This Month</option>
-            <option value="3m" ${this.filterTimeRange === '3m' ? 'selected' : ''}>Last 3 Months</option>
-            <option value="ytd" ${this.filterTimeRange === 'ytd' ? 'selected' : ''}>Year to Date</option>
-          </select>
-          <select class="filter-select" id="inventory-brand-filter">
-            <option value="all">All Brands</option>
-            ${uniqueBrands.map(b => `<option value="${escapeHtml(b)}" ${this.filterBrand === b ? 'selected' : ''}>${escapeHtml(b)}</option>`).join('')}
-          </select>
+          ${renderUniversalSearchBar('inventory-search-input', 'Search by ID, Brand...')}
+          ${renderTreeFilter('inventory-date-filter', {
+            label: 'Date Added',
+            groups: this.dateFilterGroups(allItems),
+            selected: this.filterMonths,
+            searchPlaceholder: 'Search month or year',
+            emptyText: 'No dates to filter yet.',
+          })}
+          ${renderTreeFilter('inventory-brand-filter', {
+            label: 'Brand',
+            items: uniqueBrands.map((b) => ({ value: b, label: b })),
+            selected: this.filterBrands,
+            searchPlaceholder: 'Search brand',
+            emptyText: 'No brands yet.',
+          })}
           <select class="sort-select" id="inventory-sort-select">
             <option value="recently" ${this.sortBy === 'recently' ? 'selected' : ''}>Sort: Recently Added</option>
             <option value="oldest" ${this.sortBy === 'oldest' ? 'selected' : ''}>Sort: Oldest First</option>
@@ -208,25 +226,17 @@ const InventoryPage = {
       }, 300));
     }
 
-    //Time range filter
-    const timeFilter = document.getElementById('inventory-time-filter');
-    if (timeFilter) {
-      timeFilter.addEventListener('change', (e) => {
-        this.filterTimeRange = e.target.value;
-        this.currentPage = 1;
-        Router.rerender();
-      });
-    }
+    bindTreeFilter('inventory-date-filter', (months) => {
+      this.filterMonths = months;
+      this.currentPage = 1;
+      Router.rerender();
+    });
 
-    //Brand filter
-    const brandFilter = document.getElementById('inventory-brand-filter');
-    if (brandFilter) {
-      brandFilter.addEventListener('change', (e) => {
-        this.filterBrand = e.target.value;
-        this.currentPage = 1;
-        Router.rerender();
-      });
-    }
+    bindTreeFilter('inventory-brand-filter', (brands) => {
+      this.filterBrands = brands;
+      this.currentPage = 1;
+      Router.rerender();
+    });
 
     const sortSelect = document.getElementById('inventory-sort-select');
     if (sortSelect) {
@@ -274,9 +284,13 @@ const InventoryPage = {
         <div style="width:24px;text-align:right;font-size:12px;color:var(--text-muted)">${value}</div>
       </div>`).join('') : '<p class="cell-muted">No inventory yet</p>';
 
-    //turnover line chart
-    const monthCount = this.filterTimeRange === '7d' ? 1 : this.filterTimeRange === 'month' ? 1 : this.filterTimeRange === '3m' ? 3 : this.filterTimeRange === 'ytd' ? (new Date().getMonth() + 1) : 6;
-    const months = lastNMonths(Math.max(1, monthCount));
+    const thisYear = new Date().getFullYear();
+    const months = this.filterMonths === null || !this.filterMonths.length
+      ? lastNMonths(6)
+      : [...this.filterMonths].sort().map((key) => {
+        const [y, m] = key.split('-').map(Number);
+        return { label: MONTH_ABBREV[m - 1] + (y !== thisYear ? ` '${String(y).slice(2)}` : ''), year: y, month: m };
+      });
     const soldCounts = monthlySoldCounts(DB.salesTransactions, months);
     const turnoverByMonth = soldCounts.map((c) => (filteredItems.length ? (c / filteredItems.length) * 100 : 0));
     makeLineChart('chart-turnover', months.map((m) => m.label), [{
@@ -284,7 +298,6 @@ const InventoryPage = {
       fill: false, tension: 0.35, pointRadius: 4, pointBackgroundColor: '#10184F',
     }], { yPrefix: '' });
 
-    //slowes moving items
     const inventoryById = Object.fromEntries(filteredItems.map((i) => [i.id, i]));
     const entries = [];
     for (const t of DB.salesTransactions) {
