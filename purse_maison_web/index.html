@@ -108,6 +108,14 @@
     <div class="topbar">
       <button class="topbar-menu-btn" id="menu-toggle-btn">☰</button>
       <span class="topbar-title">Main</span>
+      <span class="topbar-spacer"></span>
+      <div class="notif" id="ticket-bell" hidden>
+        <button type="button" class="notif-button" id="ticket-bell-btn" aria-haspopup="true" aria-expanded="false" aria-label="Ticket notifications">
+          <i class="fa-regular fa-bell" aria-hidden="true"></i>
+          <span class="notif-badge" id="ticket-bell-count" hidden>0</span>
+        </button>
+        <div class="notif-panel" id="ticket-bell-panel" role="dialog" aria-label="Ticket notifications" hidden></div>
+      </div>
     </div>
     <div class="panel-wrap">
       <div class="panel" id="page-content"><!-- rendered by router.js --></div>
@@ -141,6 +149,7 @@
 <script src="js/pages/forecasting.js"></script>
 <script src="js/pages/settings.js"></script>
 <script src="js/pages/help.js"></script>
+<script src="js/notifications.js"></script>
 <script src="js/router.js"></script>
 <script src="js/main.js"></script>
 </body>

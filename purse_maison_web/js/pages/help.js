@@ -463,15 +463,16 @@ const HELP_FAQS = [
 ];
 
 const HelpPage = {
-  view: 'home',      // 'home' | 'guides' | 'faqs' | 'ticket' | 'article'
+  view: 'home',   
   articleId: null,
-  backView: 'home',  // where "Back" goes from an article
+  backView: 'home',  
   query: '',
-  lastQuery: '',     // restored when going back from an article opened from search results
-  tickets: null,     // support tickets this user can see (null = not loaded yet)
+  lastQuery: '',     
+  tickets: null,     
   ticketsError: '',
   ticketsLoading: false,
   ticketFilter: 'open',
+  focusTicketId: null,
   // ------------------------------------------------------------ helpers
   rich(text) {
     return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
@@ -711,7 +712,7 @@ const HelpPage = {
     const author = (t.author && t.author.full_name) || 'Unknown';
     const handler = t.handler && t.handler.full_name;
     return `
-      <details class="help-faq help-ticket">
+        <details class="help-faq help-ticket" data-ticket-id="${t.id}">
         <summary>
           <span class="help-ticket-sum">
             <span class="help-ticket-title"><span class="help-ticket-code">${this.ticketCode(t)}</span>${escapeHtml(t.subject)}</span>
@@ -744,6 +745,26 @@ const HelpPage = {
   drawTicketLists() {
     const box = document.getElementById('help-ticket-lists');
     if (box) box.innerHTML = this.ticketListsHtml();
+    if (!box || this.focusTicketId === null || this.tickets === null) return;
+    // Open the ticket chosen in the bell. The inbox copy comes last when it is also under My Tickets.
+    const matches = box.querySelectorAll(`[data-ticket-id="${this.focusTicketId}"]`);
+    const target = matches[matches.length - 1];
+    this.focusTicketId = null;
+    if (!target) return;
+    target.open = true;
+    target.classList.add('is-focused');
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setTimeout(() => target.classList.remove('is-focused'), 2500);
+  },
+
+  /** Opens Help Center → Submit a Ticket with the inbox on this status, then opens the ticket (used by the top-bar bell). */
+  openTicket(id, status = 'all') {
+    Router.navigate('help');
+    if (!document.getElementById('help-root')) return;
+    this.view = 'ticket';
+    this.ticketFilter = TICKET_STATUSES[status] ? status : 'all';
+    this.focusTicketId = id;
+    this.redraw(true);
   },
 
   async loadTickets() {
@@ -790,6 +811,7 @@ const HelpPage = {
       form.reset();
       showToast(`Ticket ${this.ticketCode(data)} submitted. You can follow it under My Tickets.`);
       await this.loadTickets();
+      TicketBell.refresh();
     } catch (err) {
       console.error('Submitting the ticket failed:', err);
       showToast(`Could not submit the ticket: ${err.message || 'unknown error'}`);
@@ -811,6 +833,7 @@ const HelpPage = {
       if (!data || data.length === 0) throw new Error('Only the manager or owner can update tickets.');
       showToast(`Ticket ${this.ticketCode({ id })} updated.`);
       await this.loadTickets();
+      TicketBell.refresh();
     } catch (err) {
       console.error('Updating the ticket failed:', err);
       showToast(err.message || 'Could not update the ticket.');

@@ -90,6 +90,34 @@ function makeBarChart(canvasId, labels, datasets, { yPrefix = '' } = {}) {
   });
 }
 
+function makeHorizontalBarChart(canvasId, labels, data, colors, { valueSuffix = '' } = {}) {
+  if (!chartJsReady()) { showChartUnavailable(canvasId); return; }
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  const fmt = (v) => `${v > 0 ? '+' : ''}${v}${valueSuffix}`;
+  _chartRegistry[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 4, maxBarThickness: 22 }] },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (c) => fmt(c.parsed.x) } },
+      },
+      scales: {
+        x: {
+          grid: { color: (c) => (c.tick && c.tick.value === 0 ? '#9A9AA6' : '#E6E3DA') },
+          ticks: { font: CHART_FONT, color: '#7A7A88', callback: (v) => fmt(v) },
+        },
+        y: { grid: { display: false }, ticks: { font: { ...CHART_FONT, weight: '600' }, color: '#1A1A2E' } },
+      },
+    },
+  });
+}
+
 function makeDoughnutChart(canvasId, labels, data, colors) {
   if (!chartJsReady()) { showChartUnavailable(canvasId); return; }
   destroyChart(canvasId);

@@ -182,17 +182,22 @@ const ForecastingPage = {
           <div class="card-title" style="margin-bottom:14px;">Sales Trend (Actual vs Projected)</div>
           <div class="legend-row">
             <div class="legend-item"><span class="legend-dot" style="background:#3247C5"></span>Actual</div>
-            <div class="legend-item"><span class="legend-dot" style="background:#B7B7C0"></span>Projected (ARIMA)</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#fff;border:2px solid #3247C5;box-sizing:border-box;"></span>This month so far</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#8D8D99"></span>Projected (ARIMA)</div>
+            <div class="legend-item"><span class="legend-dot" style="background:rgba(50,71,197,0.18);border-radius:3px;"></span>Likely range (95%)</div>
           </div>
           <div class="chart-canvas-wrap"><canvas id="chart-sales-trend"></canvas></div>
+                    <p class="chart-insight" id="trend-insight"></p>
         </div>
         <div class="chart-card">
-          <div class="card-title" style="margin-bottom:14px;">Historical vs Projected Sales by Brand</div>
+          <div class="card-title" style="margin-bottom:14px;">Projected Growth by Brand</div>
           <div class="legend-row">
-            <div class="legend-item"><span class="legend-dot" style="background:#6C86FF"></span>Historical (last ${horizon} mo)</div>
-            <div class="legend-item"><span class="legend-dot" style="background:#10184F"></span>Projected (next ${horizon} mo)</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#2FB344"></span>Increasing</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#C98A1B"></span>Stable (within ±${GROWTH_STABLE_BAND}%)</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#D64545"></span>Decreasing</div>
           </div>
           <div class="chart-canvas-wrap"><canvas id="chart-brand-forecast"></canvas></div>
+          <p class="chart-insight" id="growth-insight"></p>
         </div>
       </div>
 
@@ -278,16 +283,74 @@ const ForecastingPage = {
 
     this.drawTrendChart();
 
-    const shown = this.visibleRows();
-    makeBarChart('chart-brand-forecast', shown.map((f) => f.brand), [
-      { label: 'Historical', data: shown.map((f) => f.historicalValue), backgroundColor: '#6C86FF', borderRadius: 2, maxBarThickness: 18 },
-      { label: 'Projected', data: shown.map((f) => f.projectedValue), backgroundColor: '#10184F', borderRadius: 2, maxBarThickness: 18 },
-    ]);
+    this.drawGrowthChart();
 
     DataStore.refreshIfStale();
   },
 
-  /** Last 6 months of actual sales, followed by the forecast months, as one timeline. */
+   /** Projected growth % per brand (ARIMA forecast vs the same number of months before it), highest first. */
+  drawGrowthChart() {
+    const rows = this.visibleRows()
+      .filter((f) => f.projectedGrowthPercent !== null)
+      .sort((a, b) => b.projectedGrowthPercent - a.projectedGrowthPercent);
+    const colours = { increasing: '#2FB344', stable: '#C98A1B', decreasing: '#D64545' };
+    makeHorizontalBarChart('chart-brand-forecast',
+      rows.map((f) => f.brand),
+      rows.map((f) => f.projectedGrowthPercent),
+      rows.map((f) => colours[f.trend] || colours.stable),
+      { valueSuffix: '%' });
+    const growthNote = document.getElementById('growth-insight');
+    if (growthNote) growthNote.textContent = this.growthInsight(rows);
+  },
+
+  /** Plain-language summary under the Sales Trend chart, built from the ARIMA numbers (no AI). */
+  trendInsight(labels, actual, projected, upper, lower, lastActual) {
+    const peso = (v) => `₱${formatAmount(v)}`;
+    const ahead = projected.map((v, i) => i).filter((i) => i > lastActual && projected[i] !== null);
+    if (!ahead.length) return 'No forecast to describe yet. Run a forecast to see the projected trend.';
+    const first = ahead[0];
+    const last = ahead[ahead.length - 1];
+    const parts = [];
+    let sentence = `Sales for ${labels[first]} are projected at about ${peso(projected[first])}`;
+    if (lastActual >= 0 && actual[lastActual] > 0) {
+      const change = ((projected[first] - actual[lastActual]) / actual[lastActual]) * 100;
+      sentence += Math.abs(change) < 0.5
+        ? `, about the same as ${labels[lastActual]}`
+        : `, ${Math.abs(change).toFixed(1)}% ${change > 0 ? 'higher' : 'lower'} than ${labels[lastActual]} (${peso(actual[lastActual])})`;
+    }
+    parts.push(`${sentence}.`);
+    if (upper[first] !== null && lower[first] !== null) {
+      parts.push(`Actual sales will most likely fall between ${peso(lower[first])} and ${peso(upper[first])}.`);
+    }
+    if (ahead.length > 1 && projected[first] > 0) {
+      const drift = ((projected[last] - projected[first]) / projected[first]) * 100;
+      parts.push(Math.abs(drift) <= GROWTH_STABLE_BAND
+        ? `Over the next ${ahead.length} months the projection stays fairly steady, so plan for similar sales each month.`
+        : `Over the next ${ahead.length} months the projection ${drift > 0 ? 'rises' : 'falls'} by about ${Math.abs(drift).toFixed(1)}% by ${labels[last]}.`);
+    }
+    return parts.join(' ');
+  },
+
+  /** Plain-language summary under the Growth by Brand chart (rows are sorted highest growth first). */
+  growthInsight(rows) {
+    if (!rows.length) return 'No brand forecasts to compare yet.';
+    const fmt = (v) => `${v > 0 ? '+' : ''}${v}%`;
+    if (rows.length === 1) return `${rows[0].brand} is projected at ${fmt(rows[0].projectedGrowthPercent)} compared with the same number of months before the forecast.`;
+    const count = (t) => rows.filter((f) => f.trend === t).length;
+    const top = rows[0];
+    const bottom = rows[rows.length - 1];
+    const parts = [`Of ${rows.length} brands, ${count('increasing')} are projected to grow, ${count('stable')} to stay stable and ${count('decreasing')} to decline.`];
+    if (top.projectedGrowthPercent > 0) parts.push(`${top.brand} leads at ${fmt(top.projectedGrowthPercent)}, making it a strong brand to prioritise for new consignments.`);
+    if (bottom.trend === 'decreasing') parts.push(`${bottom.brand} shows the largest drop (${fmt(bottom.projectedGrowthPercent)}); consider reviewing its pricing or how many items are accepted.`);
+    return parts.join(' ');
+  },
+
+  /**
+   * Last 6 complete months of actual sales, then the forecast months, as one timeline.
+   * The current month is still in progress, so its sales so far are shown as a separate hollow
+   * point instead of a drop in the line, and the forecast line joins the last complete month.
+   * The shaded band is the likely range (95%) saved by the forecast job.
+   */
   drawTrendChart() {
     const keyOf = (y, m) => `${y}-${m}`;
     const visible = new Set(this.visibleRows().map((f) => f.brandKey));
@@ -297,41 +360,61 @@ const ForecastingPage = {
     const firstForecast = DB.forecastRows.reduce((min, r) => (!min || r.month < min ? r.month : min), null);
     const cutoff = firstForecast ? new Date(firstForecast.getFullYear(), firstForecast.getMonth() + this.monthsShown(), 1) : null;
 
-    const actualMonths = lastNMonths(6);
+    const recent = lastNMonths(7);            // 6 complete months + the current month
+    const actualMonths = recent.slice(0, 6);
+    const current = recent[6];
     const series = DB.salesSeries.filter((s) => brandOk(s.brandKey));
     const actualByKey = new Map(actualMonths.map((m) => [keyOf(m.year, m.month), monthlySalesTotals(series, [m])[0]]));
+    const currentSoFar = monthlySalesTotals(series, [current])[0];
 
     const forecastByKey = new Map();
+    const spreadByKey = new Map();
     for (const r of DB.forecastRows) {
       if (!brandOk(r.brandKey)) continue;
       if (cutoff && r.month >= cutoff) continue;
       const k = keyOf(r.month.getFullYear(), r.month.getMonth() + 1);
       forecastByKey.set(k, (forecastByKey.get(k) || 0) + r.revenue);
+      if (r.lower !== null && r.upper !== null) {
+        const half = (r.upper - r.lower) / 2;
+        spreadByKey.set(k, (spreadByKey.get(k) || 0) + half * half);
+      }
     }
 
     const timeline = new Map();
     actualMonths.forEach((m) => timeline.set(keyOf(m.year, m.month), { year: m.year, month: m.month }));
+    timeline.set(keyOf(current.year, current.month), { year: current.year, month: current.month });
     for (const k of forecastByKey.keys()) {
       const [y, m] = k.split('-').map(Number);
       timeline.set(k, { year: y, month: m });
     }
     const ordered = [...timeline.entries()].sort((a, b) => a[1].year - b[1].year || a[1].month - b[1].month);
+    const currentKey = keyOf(current.year, current.month);
 
     const thisYear = new Date().getFullYear();
-    const labels = ordered.map(([, t]) => MONTH_ABBREV[t.month - 1] + (t.year !== thisYear ? ` '${String(t.year).slice(2)}` : ''));
+    const labels = ordered.map(([k, t]) => MONTH_ABBREV[t.month - 1] + (t.year !== thisYear ? ` '${String(t.year).slice(2)}` : '') + (k === currentKey ? ' (so far)' : ''));
     const actual = ordered.map(([k]) => (actualByKey.has(k) ? actualByKey.get(k) : null));
+    const partial = ordered.map(([k]) => (k === currentKey && currentSoFar > 0 ? currentSoFar : null));
     const projected = ordered.map(([k]) => (forecastByKey.has(k) ? forecastByKey.get(k) : null));
+    const upper = ordered.map(([k]) => (spreadByKey.has(k) ? forecastByKey.get(k) + Math.sqrt(spreadByKey.get(k)) : null));
+    const lower = ordered.map(([k]) => (spreadByKey.has(k) ? Math.max(0, forecastByKey.get(k) - Math.sqrt(spreadByKey.get(k))) : null));
 
-    // Join the two lines so the projection starts where the actuals end
     let lastActual = -1;
     actual.forEach((v, i) => { if (v !== null) lastActual = i; });
     if (lastActual >= 0 && projected[lastActual] === null && projected.some((v) => v !== null)) {
       projected[lastActual] = actual[lastActual];
+      if (upper.some((v) => v !== null)) {
+        upper[lastActual] = actual[lastActual];
+        lower[lastActual] = actual[lastActual];
+      }
     }
-
+    const trendNote = document.getElementById('trend-insight');
+    if (trendNote) trendNote.textContent = this.trendInsight(labels, actual, projected, upper, lower, lastActual);
     makeLineChart('chart-sales-trend', labels, [
-      { data: projected, borderColor: '#B7B7C0', borderDash: [6, 4], pointRadius: 3, fill: false, tension: 0.35 },
-      { data: actual, borderColor: '#3247C5', pointRadius: 4, pointBackgroundColor: '#3247C5', fill: false, tension: 0.35 },
+      { label: 'Likely high', data: upper, borderColor: 'rgba(50,71,197,0.25)', borderWidth: 1, backgroundColor: 'rgba(50,71,197,0.12)', pointRadius: 0, fill: '+1', tension: 0.35, spanGaps: true },
+      { label: 'Likely low', data: lower, borderColor: 'rgba(50,71,197,0.25)', borderWidth: 1, pointRadius: 0, fill: false, tension: 0.35, spanGaps: true },
+      { label: 'Projected', data: projected, borderColor: '#8D8D99', borderDash: [6, 4], pointRadius: 3, pointBackgroundColor: '#fff', pointBorderColor: '#8D8D99', fill: false, tension: 0.35, spanGaps: true },
+      { label: 'Actual', data: actual, borderColor: '#3247C5', pointRadius: 4, pointBackgroundColor: '#3247C5', fill: false, tension: 0.35 },
+      { label: 'This month so far', data: partial, showLine: false, pointRadius: 5, pointBackgroundColor: '#fff', pointBorderColor: '#3247C5', pointBorderWidth: 2 },
     ]);
   },
 

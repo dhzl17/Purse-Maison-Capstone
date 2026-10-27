@@ -140,9 +140,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const targetRoute = Session.defaultRoute();
     Router.navigate(targetRoute);
+    TicketBell.start();
     showToast(`Welcome back, ${Session.currentUser.fullName || Session.currentUser.username}!`);
   }
-
-  // Keep staff signed in across page refreshes (Supabase saves the session)
   Session.restore().then((restored) => { if (restored) enterApp(); });
 });
