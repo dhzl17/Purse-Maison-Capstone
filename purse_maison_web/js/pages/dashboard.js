@@ -183,14 +183,20 @@ const DashboardPage = {
         <div class="stat-card"><div class="stat-title">Monthly Sales Growth</div><div class="stat-value-row">${stats.growthPercent >= 0 ? '<span class="stat-trend">↑</span>' : ''}<span class="stat-value">${stats.growthPercent.toFixed(1)}%</span></div></div>
       </div>
 
-      <div class="chart-row">
+      <div class="chart-row chart-row-equal">
         <div class="chart-card">
           <div class="chart-card-title"><span>Sales Overview</span><span class="period-chip">${this.filterPeriod} Months</span></div>
           <div class="chart-canvas-wrap"><canvas id="chart-sales-overview"></canvas></div>
         </div>
         <div class="chart-card">
-          <div class="chart-card-title"><span>Monthly Sales Revenue</span></div>
-          <div class="chart-canvas-wrap"><canvas id="chart-monthly-revenue"></canvas></div>
+          <div class="chart-card-title">
+            <span>Customer Interactions</span>
+            <span class="period-chip">${this.filterPeriod} Months${this.filterBrands !== null ? ' · All brands' : ''}</span>
+          </div>
+          <div class="legend-row">
+            ${INTERACTION_SERIES.map(([field, label, color]) => `<div class="legend-item"><span class="legend-dot" style="background:${color}"></span>${escapeHtml(label)} (${stats.interactionTotals[field]})</div>`).join('')}
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="chart-customer-interactions"></canvas></div>
         </div>
       </div>
 
@@ -222,22 +228,8 @@ const DashboardPage = {
           <ul>${insights.map((i) => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
         </div>
       </div>
-
-      <div class="chart-row">
-        <div class="chart-card">
-          <div class="chart-card-title">
-            <span>Customer Interactions</span>
-            <span class="period-chip">${this.filterPeriod} Months${this.filterBrands !== null ? ' · All brands' : ''}</span>
-          </div>
-          <div class="legend-row">
-            ${INTERACTION_SERIES.map(([field, label, color]) => `<div class="legend-item"><span class="legend-dot" style="background:${color}"></span>${escapeHtml(label)} (${stats.interactionTotals[field]})</div>`).join('')}
-          </div>
-          <div class="chart-canvas-wrap"><canvas id="chart-customer-interactions"></canvas></div>
-        </div>
-      </div>
     `;
   },
-
     afterRender() {
     bindTreeFilter('dashboard-period', (value) => {
       this.filterPeriod = parseInt(value, 10) || 6;
@@ -259,10 +251,6 @@ const DashboardPage = {
     makeLineChart('chart-sales-overview', stats.monthLabels, [{
       data: stats.monthlyTotals, borderColor: '#3247C5', backgroundColor: 'rgba(50,71,197,0.12)',
       fill: true, tension: 0.35, pointBackgroundColor: '#3247C5', pointRadius: 4,
-    }]);
-
-    makeBarChart('chart-monthly-revenue', stats.monthLabels, [{
-      data: stats.monthlyTotals, backgroundColor: '#10184F', borderRadius: 3, maxBarThickness: 28,
     }]);
 
     const statusEntries = Object.entries(stats.statusCounts).filter(([, v]) => v > 0);

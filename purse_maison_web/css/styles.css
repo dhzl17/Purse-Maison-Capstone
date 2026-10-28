@@ -1950,3 +1950,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 @media (max-width: 600px) {
   .notif-panel { width: min(340px, calc(100vw - 32px)); }
 }
+
+.chart-row-equal { align-items: stretch; }
+.chart-row-equal > .chart-card { display: flex; flex-direction: column; }
+.chart-row-equal .chart-canvas-wrap { flex: 1; min-height: 240px; height: auto; }
