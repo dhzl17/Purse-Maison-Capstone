@@ -418,6 +418,12 @@ const ConsignmentFlow = {
       this.overviewPage = parseInt(btn.dataset.page, 10);
       Router.rerender();
     });
+    const newInquiryBtn = document.getElementById('cons-new-inquiry');
+    if (newInquiryBtn) newInquiryBtn.addEventListener('click', () => Router.navigate('consignment-preintake'));
+
+    document.querySelectorAll('.overview-table [data-history]').forEach((btn) => {
+      btn.addEventListener('click', () => this.showHistory(this.item(btn.dataset.history)));
+    });
   },
 
   async showHistory(item) {
