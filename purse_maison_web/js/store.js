@@ -13,6 +13,7 @@
  *   DB.clientInquiries      client inquiries (Client Assignment page)
  *   DB.salesAssociates      sales associates with their current workload
  *   DB.assignmentActivity   recent assignment activity feed
+ *   DB.customerInteractions monthly inquiry outcomes (Dashboard Customer Interactions chart)
  *   DB.pipelineItems        every consignment item with its consignor, photos and negotiation log
  *   DB.consignorList        consignors, for lookup and duplicate checks
  *   DB.authFeeSchedule      authentication fee schedule
@@ -50,6 +51,7 @@ const DataStore = {
         this._run('items', () => this.loadItems()),
         this._run('sales history', () => this.loadSalesSeries()),
         this._run('clients', () => this.loadClients()),
+        this._run('customer interactions', () => this.loadCustomerInteractions()),
         this._run('consignments', () => this.loadPipeline()),
       ]);
       // The forecast summary compares against sales history, so it loads after it.
@@ -198,9 +200,10 @@ const DataStore = {
   // ---------------------------------------------------------------- clients
   async loadClients() {
     const [inq, work, profiles, activity] = await Promise.all([
+      // Newest 1,000 inquiries for the Client Assignment table; `count` is the true total
       sbClient.from('inquiries')
-        .select('id, client_name, client_phone, client_email, client_role, is_vip, inquiry_channel, inquiry_status, transaction_result, assigned_associate_id, assigned_at, created_at')
-        .order('created_at', { ascending: true })
+        .select('id, client_name, client_phone, client_email, client_role, is_vip, inquiry_channel, inquiry_status, transaction_result, assigned_associate_id, assigned_at, created_at', { count: 'exact' })
+        .order('created_at', { ascending: false })
         .limit(1000),
       sbClient.from('associate_workload')
         .select('associate_id, full_name, open_inquiries, open_consignments, status')
@@ -216,16 +219,16 @@ const DataStore = {
       DB.clientInquiries = []; DB.salesAssociates = []; DB.assignmentActivity = []; DB.inquiryCount = 0;
       throw inq.error;
     }
-    DB.inquiryCount = inq.data.length;
+    DB.inquiryCount = typeof inq.count === 'number' ? inq.count : inq.data.length;
 
     const names = new Map();
     if (!profiles.error) for (const p of profiles.data) names.set(p.id, p.full_name || '(unnamed)');
     if (!work.error) for (const w of work.data) names.set(w.associate_id, w.full_name || names.get(w.associate_id) || '(unnamed)');
 
-    // Oldest inquiry is No. 1; the page sorts them as needed.
+    // Oldest inquiry is No. 1 (rows arrive newest first); the page sorts them as needed.
     DB.clientInquiries = inq.data.map((r, idx) => ({
       id: r.id,
-      no: idx + 1,
+      no: DB.inquiryCount - idx,
       clientName: r.client_name,
       phone: r.client_phone || '',
       email: r.client_email || '',
@@ -261,6 +264,24 @@ const DataStore = {
       id: `aa-${i}`,
       description: a.description,
       timestamp: this.formatDateTime(a.created_at),
+    }));
+  },
+
+  /** Monthly inquiry outcomes from the customer_interaction_monthly view (Module 25). */
+  async loadCustomerInteractions() {
+    const { data, error } = await sbClient.from('customer_interaction_monthly')
+      .select('month, consigned, consignor_not_proceeded, buyer_purchased, buyer_not_proceeded, in_progress, total_inquiries')
+      .order('month', { ascending: true })
+      .limit(1000);
+    if (error) { DB.customerInteractions = []; throw error; }
+    DB.customerInteractions = data.map((r) => ({
+      date: this.parseDateOnly(r.month),
+      consigned: r.consigned || 0,
+      consignorNotProceeded: r.consignor_not_proceeded || 0,
+      buyerPurchased: r.buyer_purchased || 0,
+      buyerNotProceeded: r.buyer_not_proceeded || 0,
+      inProgress: r.in_progress || 0,
+      total: r.total_inquiries || 0,
     }));
   },
 

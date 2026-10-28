@@ -14,6 +14,8 @@ const ClientsPage = {
   sortBy: 'recently',
   activityPage: 1,
   activityPageSize: 5,
+  inquiryPage: 1,
+  inquiryPageSize: 10,
 
   canWrite() {
     const role = Session.currentUser && Session.currentUser.role;
@@ -25,8 +27,9 @@ const ClientsPage = {
     const [label, tone] = map[status] || ['Unknown', 'info'];
     return badge(label, tone);
   },
-  transactionResultCell(result) {
+  transactionResultCell(result, role) {
     if (result === 'none' || !result) return '<span class="cell-muted">-</span>';
+    if (role === 'consignor') return result === 'purchased' ? badge('Consigned', 'success') : badge('Did Not Consign', 'danger');
     return result === 'purchased' ? badge('Purchased', 'success') : badge('No Purchase', 'danger');
   },
   associateStatusBadge(status) {
@@ -74,7 +77,11 @@ const ClientsPage = {
   },
 
   render() {
-    const inquiries = this.filterAndSortInquiries(DB.clientInquiries);
+    const allInquiries = this.filterAndSortInquiries(DB.clientInquiries);
+    const inquiryPages = Math.max(1, Math.ceil(allInquiries.length / this.inquiryPageSize));
+    this.inquiryPage = Math.min(Math.max(1, this.inquiryPage), inquiryPages);
+    const inquiryStart = (this.inquiryPage - 1) * this.inquiryPageSize;
+    const inquiries = allInquiries.slice(inquiryStart, inquiryStart + this.inquiryPageSize);
     const associates = DB.salesAssociates;
     const activity = DB.assignmentActivity;
     const canWrite = this.canWrite();
@@ -126,16 +133,19 @@ const ClientsPage = {
                     <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.inquiryStatusBadge(i.inquiryStatus)}</td>
                     <td class="cell-center" style="text-align: center; vertical-align: middle;">${escapeHtml(i.inquirySource)}</td>
                     <td class="${i.assignedName ? '' : 'cell-muted'}" style="text-align: center; vertical-align: middle; white-space: nowrap;">${i.assignedName ? escapeHtml(i.assignedName) : 'Unassigned'}</td>
-                    <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.transactionResultCell(i.transactionResult)}</td>
+                    <td class="cell-center" style="text-align: center; vertical-align: middle;">${this.transactionResultCell(i.transactionResult, i.clientRoleValue)}</td>
                     ${canWrite ? `<td style="text-align: center; vertical-align: middle;"><div class="row-actions" style="justify-content: center;">
                         <button class="icon-btn" data-edit-inquiry="${escapeHtml(i.id)}" title="Edit">
                           <i class="fa-solid fa-pen"></i>
                         </button>
                     </div></td>` : ''}
                   </tr>`).join('')}
+                ${fillerRows(inquiries.length, this.inquiryPageSize, canWrite ? 9 : 8, inquiryPages)}
               </tbody>
             </table>
           </div>
+          ${inquiryPages > 1 ? `<div class="pagination" id="clients-pagination">${renderPaginationButtons(this.inquiryPage, inquiryPages)}</div>` : ''}
+          ${DB.inquiryCount > DB.clientInquiries.length ? `<p class="cell-muted" style="font-size:12px; margin-top:6px;">Showing the latest ${DB.clientInquiries.length.toLocaleString()} of ${DB.inquiryCount.toLocaleString()} inquiries.</p>` : ''}
         </div>
 
         <div class="chart-card col-narrow">
@@ -192,6 +202,7 @@ const ClientsPage = {
       searchInput.value = this.searchKeyword;
       searchInput.addEventListener('input', debounce((e) => {
         this.searchKeyword = e.target.value;
+        this.inquiryPage = 1;
         Router.rerender();
         const newInput = document.getElementById('clients-search-input');
         if (newInput) { newInput.focus(); newInput.setSelectionRange(newInput.value.length, newInput.value.length); }
@@ -202,9 +213,17 @@ const ClientsPage = {
     if (sortSelect) {
       sortSelect.addEventListener('change', (e) => {
         this.sortBy = e.target.value;
+        this.inquiryPage = 1;
         Router.rerender();
       });
     }
+
+    document.getElementById('clients-pagination')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-page]');
+      if (!btn || btn.disabled) return;
+      this.inquiryPage = parseInt(btn.dataset.page, 10);
+      Router.rerender();
+    });
 
       this.bindActivityPager();
 
@@ -312,7 +331,7 @@ const ClientsPage = {
         </div>
         <div class="field-group"><label class="field-label">Transaction Result</label>
           <select class="field-input" name="transactionResult">
-            ${[['none', 'None'], ['no_purchase', 'No Purchase'], ['purchased', 'Purchased']].map(([v, l]) => `<option value="${v}" ${sel(existing.transactionResult === v)}>${l}</option>`).join('')}
+            ${[['none', 'None'], ['no_purchase', 'No Purchase / Did Not Consign'], ['purchased', 'Purchased / Consigned']].map(([v, l]) => `<option value="${v}" ${sel(existing.transactionResult === v)}>${l}</option>`).join('')}
           </select>
         </div>` : ''}
         <div class="modal-actions">

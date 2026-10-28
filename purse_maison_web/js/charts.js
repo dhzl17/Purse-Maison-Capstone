@@ -66,7 +66,7 @@ function makeLineChart(canvasId, labels, datasets, { yPrefix = '' } = {}) {
   });
 }
 
-function makeBarChart(canvasId, labels, datasets, { yPrefix = '' } = {}) {
+function makeBarChart(canvasId, labels, datasets, { yPrefix = '', stacked = false } = {}) {
   if (!chartJsReady()) { showChartUnavailable(canvasId); return; }
   destroyChart(canvasId);
   const ctx = document.getElementById(canvasId);
@@ -77,14 +77,15 @@ function makeBarChart(canvasId, labels, datasets, { yPrefix = '' } = {}) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: { legend: { display: false }, tooltip: stacked ? { mode: 'index', intersect: false } : {} },
       scales: {
         y: {
+          stacked,
           beginAtZero: true,
           grid: { color: '#E6E3DA' },
           ticks: { font: CHART_FONT, color: '#7A7A88', callback: (v) => yPrefix + v },
         },
-        x: { grid: { display: false }, ticks: { font: CHART_FONT, color: '#7A7A88' } },
+        x: { stacked, grid: { display: false }, ticks: { font: CHART_FONT, color: '#7A7A88' } },
       },
     },
   });

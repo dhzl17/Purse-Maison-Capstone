@@ -5,6 +5,14 @@
 
 const DASHBOARD_PERIODS = [[3, 'Last 3 Months'], [6, 'Last 6 Months'], [12, 'Last 12 Months']];
 
+// Customer Interactions chart: [field in DB.customerInteractions, legend label, colour]
+const INTERACTION_SERIES = [
+  ['consigned', 'Consigned', '#10184F'],
+  ['consignorNotProceeded', 'Consignor did not proceed', '#C9A24A'],
+  ['buyerPurchased', 'Buyer purchased', '#3247C5'],
+  ['buyerNotProceeded', 'Buyer only inquired', '#B7B7C0'],
+];
+
 const DashboardPage = {
   filterPeriod: 6,     
   filterBrands: null,
@@ -84,7 +92,18 @@ const DashboardPage = {
       Sold: itemsSold,
     };
 
-    return { itemsSold, activeConsignedItems, thisMonthTotal, growthPercent, periodTotal, periodUnits, avgDisplayDuration, turnoverRate, totalInquiries: DB.inquiryCount, fastMovingCount, slowMovingCount, monthLabels, monthlyTotals, statusCounts };
+    // Customer interactions per month (all brands: inquiries are not filtered by brand)
+    const interactionRows = DB.customerInteractions || [];
+    const interactions = {};
+    for (const [field] of INTERACTION_SERIES) {
+      interactions[field] = months.map((m) => interactionRows
+        .filter((r) => r.date.getFullYear() === m.year && r.date.getMonth() + 1 === m.month)
+        .reduce((sum, r) => sum + r[field], 0));
+    }
+    const sumOf = (field) => interactions[field].reduce((a, b) => a + b, 0);
+    const interactionTotals = Object.fromEntries(INTERACTION_SERIES.map(([field]) => [field, sumOf(field)]));
+
+    return { itemsSold, activeConsignedItems, thisMonthTotal, growthPercent, periodTotal, periodUnits, avgDisplayDuration, turnoverRate, totalInquiries: DB.inquiryCount, fastMovingCount, slowMovingCount, monthLabels, monthlyTotals, statusCounts, interactions, interactionTotals };
   },
 
   buildInsights(stats) {
@@ -106,6 +125,12 @@ const DashboardPage = {
     }
     insights.push(`${(stats.turnoverRate * 100).toFixed(1)}% of current inventory has sold so far.`);
     if (stats.activeConsignedItems > 0) insights.push(`${stats.activeConsignedItems} consigned item(s) are still active.`);
+    const t = stats.interactionTotals;
+    const buyers = t.buyerPurchased + t.buyerNotProceeded;
+    const consignors = t.consigned + t.consignorNotProceeded;
+    if (buyers > 0 && consignors > 0) {
+      insights.push(`${Math.round((t.buyerPurchased / buyers) * 100)}% of buyer inquiries ended in a purchase and ${Math.round((t.consigned / consignors) * 100)}% of consignor inquiries led to a consignment (${this.periodLabel().toLowerCase()}).`);
+    }
     return insights;
   },
 
@@ -197,6 +222,19 @@ const DashboardPage = {
           <ul>${insights.map((i) => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
         </div>
       </div>
+
+      <div class="chart-row">
+        <div class="chart-card">
+          <div class="chart-card-title">
+            <span>Customer Interactions</span>
+            <span class="period-chip">${this.filterPeriod} Months${this.filterBrands !== null ? ' · All brands' : ''}</span>
+          </div>
+          <div class="legend-row">
+            ${INTERACTION_SERIES.map(([field, label, color]) => `<div class="legend-item"><span class="legend-dot" style="background:${color}"></span>${escapeHtml(label)} (${stats.interactionTotals[field]})</div>`).join('')}
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="chart-customer-interactions"></canvas></div>
+        </div>
+      </div>
     `;
   },
 
@@ -237,5 +275,11 @@ const DashboardPage = {
       { data: stats.monthLabels.map(() => average), borderColor: '#B7B7C0', borderDash: [6, 4], pointRadius: 0, fill: false },
       { data: stats.monthlyTotals, borderColor: '#3247C5', backgroundColor: 'rgba(50,71,197,0.25)', fill: true, tension: 0.35, pointRadius: 0 },
     ]);
+
+    makeBarChart('chart-customer-interactions', stats.monthLabels,
+      INTERACTION_SERIES.map(([field, label, color]) => ({
+        label, data: stats.interactions[field], backgroundColor: color, borderRadius: 2, maxBarThickness: 36,
+      })),
+      { stacked: true });
   },
 };
