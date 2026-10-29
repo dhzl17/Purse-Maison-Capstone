@@ -628,6 +628,12 @@ const ConsignmentFlow = {
       const counter = Number(document.getElementById('neg-counter').value) || null;
       const notes = document.getElementById('neg-notes').value.trim() || null;
       if (!asking && !counter) return showToast('Enter an asking price or a counteroffer.');
+      const problem = Validate.first(
+        Validate.amount(document.getElementById('neg-asking').value, 'Asking price', false),
+        Validate.amount(document.getElementById('neg-counter').value, 'Counteroffer', false),
+        Validate.notes(notes, 'Notes'),
+      );
+      if (problem) return showToast(problem);
       this.save(btn, 'Negotiation logged.', async () => {
         const { error } = await sbClient.from('price_negotiations').insert({ item_id: i.id, asking_price: asking, counter_offer: counter, notes });
         if (error) throw error;
@@ -636,13 +642,22 @@ const ConsignmentFlow = {
     on('neg-save-payout', (btn) => {
       const v = Number(document.getElementById('neg-payout').value);
       if (!(v > 0)) return showToast('Enter the agreed payout amount.');
+      const problem = Validate.amount(document.getElementById('neg-payout').value, 'Agreed payout');
+      if (problem) return showToast(problem);
       this.save(btn, 'Agreed payout saved.', () => this.updateItem(i.id, { agreed_payout: v }));
     });
+    const apptInput = document.getElementById('pre-appointment');
+    const savedAppt = apptInput ? apptInput.value : '';
+    Validate.limitToFuture(apptInput);
     on('pre-save-appointment', (btn) => {
       const method = document.getElementById('pre-fulfillment').value || null;
       const when = document.getElementById('pre-appointment').value;
       if (!method) return showToast('Choose a fulfillment method.');
       if (!when) return showToast('Choose the appointment date and time.');
+      if (when !== savedAppt) {
+        const problem = Validate.futureDateTime(when, 'Appointment date and time');
+        if (problem) return showToast(problem);
+      }
       this.save(btn, 'Appointment saved.', () => this.updateItem(i.id, { fulfillment_method: method, appointment_at: new Date(when).toISOString() }));
     });
     on('pre-advance', (btn) => {
@@ -667,11 +682,21 @@ const ConsignmentFlow = {
     const consignorText = text('consignor');
     const brand = text('brand');
     if (!consignorText || !brand) return showToast('Consignor and brand are required.');
-    const phone = text('phone');
+    const phone = Validate.normalizePhone(text('phone'));
     const email = text('email').toLowerCase();
 
     // Existing consignor picked from the list?
     let consignor = DB.consignorList.find((c) => this.consignorOption(c) === consignorText);
+    const problem = Validate.first(
+      consignor ? null : Validate.personName(consignorText, 'Consignor name'),
+      consignor ? null : Validate.phone(phone),
+      consignor ? null : Validate.email(email),
+      Validate.itemText(brand, 'Brand', true),
+      Validate.itemText(text('model'), 'Model'),
+      Validate.amount(text('asking'), 'Asking price', false),
+      Validate.notes(text('notes'), 'Internal notes'),
+    );
+    if (problem) return showToast(problem);
     if (!consignor) {
       // Duplicate detection for new consignors: same phone, email, or exact name
       const norm = (s) => String(s || '').replace(/\s+/g, '').toLowerCase();
@@ -936,6 +961,17 @@ const ConsignmentFlow = {
         if (acc.includes('None') && acc.length > 1) return showToast('Untick "None" when accessories are included.');
         const serial = t('serial');
         const microchip = t('microchip');
+        const problem = Validate.first(
+          Validate.itemText(t('brand'), 'Brand', true),
+          Validate.itemText(t('model'), 'Model'),
+          Validate.itemText(t('color'), 'Color'),
+          Validate.itemText(t('hardware'), 'Hardware'),
+          Validate.code(serial, 'Serial number'),
+          Validate.code(microchip, 'Microchip number'),
+          Validate.itemText(t('dateCode'), 'Date code'),
+          Validate.notes(t('conditionNotes'), 'Condition notes'),
+        );
+        if (problem) return showToast(problem);
         const norm = (s) => String(s || '').trim().toLowerCase();
         const dup = DB.pipelineItems.find((o) => o.id !== i.id && (
           (serial && (norm(o.serial) === norm(serial) || norm(o.microchip) === norm(serial))) ||
@@ -983,6 +1019,8 @@ const ConsignmentFlow = {
     on('int-confirm-payment', (btn) => {
       const ref = document.getElementById('int-pay-ref').value.trim();
       if (!ref) return showToast('Enter the QR PH reference number.');
+      const problem = Validate.code(ref, 'QR PH reference number', true);
+      if (problem) return showToast(problem);
       this.save(btn, `Payment confirmed. ${i.code} is now in the authentication queue.`, async () => {
         const { data, error } = await sbClient.from('authentication_records')
           .update({ payment_status: 'confirmed', payment_reference: ref }).eq('item_id', i.id).select('id');

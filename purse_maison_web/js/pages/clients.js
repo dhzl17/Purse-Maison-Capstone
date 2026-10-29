@@ -360,12 +360,15 @@ const ClientsPage = {
     const text = (k) => String(fd.get(k) || '').trim();
     const name = text('clientName');
     if (!name) { showToast('Please enter the client name.'); return false; }
+    const phone = Validate.normalizePhone(text('phone'));
+    const problem = Validate.first(Validate.personName(name, 'Client name'), Validate.phone(phone), Validate.email(text('email')));
+    if (problem) { showToast(problem); return false; }
 
     try {
       if (!existing) {
         const row = {
           client_name: name,
-          client_phone: text('phone') || null,
+          client_phone: phone || null,
           client_email: text('email') || null,
           client_role: text('clientRole') || 'buyer',
           inquiry_channel: text('channel') || 'walk_in',
@@ -379,7 +382,7 @@ const ClientsPage = {
         const changes = {};
         const setIf = (col, val, old) => { if (val !== old) changes[col] = val; };
         setIf('client_name', name, existing.clientName);
-        setIf('client_phone', text('phone') || null, existing.phone || null);
+        setIf('client_phone', phone || null, existing.phone || null);
         setIf('client_email', text('email') || null, existing.email || null);
         setIf('client_role', text('clientRole'), existing.clientRoleValue);
         setIf('inquiry_channel', text('channel'), existing.channel);

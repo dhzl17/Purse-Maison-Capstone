@@ -796,6 +796,8 @@ const HelpPage = {
     const description = String(fd.get('description') || '').trim();
     if (subject.length < 3) return showToast('Enter a subject (at least 3 characters).');
     if (description.length < 10) return showToast('Describe the problem (at least 10 characters).');
+    const problem = Validate.first(Validate.notes(subject, 'Subject', true, 120), Validate.notes(description, 'Description', true, 2000));
+    if (problem) return showToast(problem);
 
     const btn = form.querySelector('#ticket-submit');
     btn.disabled = true;
@@ -1030,4 +1032,4 @@ const HelpPage = {
       this.drawTicketLists();
     });
   },
-};
+};

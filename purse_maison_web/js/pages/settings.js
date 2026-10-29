@@ -263,6 +263,8 @@ const SettingsPage = {
       const btn = e.target.querySelector('button[type="submit"]');
       const fullName = document.getElementById('settings-fullname').value.trim();
       if (!fullName) return showToast('Enter your full name.');
+      const problem = Validate.personName(fullName, 'Full name');
+      if (problem) return showToast(problem);
       btn.disabled = true;
       const { error } = await sbClient.rpc('update_my_profile', { new_full_name: fullName, new_preferences: null });
       btn.disabled = false;
@@ -422,6 +424,8 @@ const SettingsPage = {
       const password = String(fd.get('password') || '');
       const role = String(fd.get('role') || '');
       const btn = e.target.querySelector('button[type="submit"]');
+      const problem = Validate.personName(fullName, 'Full name');
+      if (problem) return showToast(problem);
       btn.disabled = true;
       try {
         await this.callStaffAdmin({ action: 'create', username, full_name: fullName, role, password });

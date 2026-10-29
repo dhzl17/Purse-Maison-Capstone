@@ -269,10 +269,13 @@ Object.assign(ConsignmentFlow, {
     overlay.querySelector('#sale-save').addEventListener('click', (e) => {
       const buyer = overlay.querySelector('#sale-buyer').value.trim();
       if (!buyer) return showToast("Enter the buyer's name.");
+      const buyerPhone = Validate.normalizePhone(overlay.querySelector('#sale-phone').value);
+      const problem = Validate.first(Validate.personName(buyer, 'Buyer name'), Validate.phone(buyerPhone, 'Buyer phone number'));
+      if (problem) return showToast(problem);
       const lay = type.value === 'layaway';
       this.save(e.target, `Sale recorded for ${i.code}.`, async () => {
         const { error } = await sbClient.from('sales_transactions').insert({
-          item_id: i.id, buyer_name: buyer, buyer_phone: overlay.querySelector('#sale-phone').value.trim() || null,
+          item_id: i.id, buyer_name: buyer, buyer_phone: buyerPhone || null,
           sale_type: type.value, layaway_months: lay ? Number(months.value) : null,
         });
         if (error) throw error;
@@ -300,6 +303,8 @@ Object.assign(ConsignmentFlow, {
     overlay.querySelector('#inst-save').addEventListener('click', (e) => {
       const amount = Number(overlay.querySelector('#inst-amount').value);
       if (!(amount > 0)) return showToast('Enter the amount received.');
+      const problem = Validate.amount(overlay.querySelector('#inst-amount').value, 'Amount received', true, 2);
+      if (problem) return showToast(problem);
       this.save(e.target, `Payment of ${this.peso(amount)} recorded.`, async () => {
         const { error } = await sbClient.from('layaway_payments').insert({ sale_id: s.id, amount });
         if (error) throw error;
@@ -326,6 +331,8 @@ Object.assign(ConsignmentFlow, {
     });
     overlay.querySelector('#ext-save').addEventListener('click', (e) => {
       if (!overlay.querySelector('#ext-agreed').checked) return showToast('An extension needs the consignor\'s agreement.');
+      const problem = Validate.notes(overlay.querySelector('#ext-notes').value, 'Notes');
+      if (problem) return showToast(problem);
       const days = Number(overlay.querySelector('#ext-days').value);
       this.save(e.target, `${i.code} extended by ${days} days.`, async () => {
         const { error } = await sbClient.from('contract_extensions').insert({

@@ -175,6 +175,8 @@ Object.assign(ConsignmentFlow, {
     on('price-save', (btn) => {
       const price = Number(input.value);
       if (!(price > 0)) return showToast('Enter the selling price.');
+      const problem = Validate.amount(input.value, 'Selling price');
+      if (problem) return showToast(problem);
       if (!this.previewMarkup(price, i.category)) return showToast('No markup tier covers this price. Choose a price in a covered range.');
       this.save(btn, `Price saved: ${this.peso(price)}.`, () => this.updateItem(i.id, { price }));
     });

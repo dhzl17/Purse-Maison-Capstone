@@ -273,6 +273,8 @@ Object.assign(ConsignmentFlow, {
     on('design-return', (btn) => {
       const note = document.getElementById('design-revision-note').value.trim();
       if (!note) return showToast('Write what needs to be reshot.');
+      const problem = Validate.notes(note, 'Revision note');
+      if (problem) return showToast(problem);
       this.save(btn, `${i.code} returned to the photographer.`,
         () => this.updateItem(i.id, { current_stage: 'photography', photo_revision_note: note }));
     });
@@ -288,6 +290,14 @@ Object.assign(ConsignmentFlow, {
         e.preventDefault();
         const fd = new FormData(form);
         const t = (k) => String(fd.get(k) || '').trim() || null;
+        const problem = Validate.first(
+          Validate.itemText(t('title'), 'Title', false, 150),
+          Validate.notes(t('description'), 'Description', false, 5000),
+          Validate.notes(t('specifications'), 'Specifications', false, 5000),
+          Validate.itemText(t('seo_title'), 'SEO title', false, 150),
+          Validate.notes(t('seo_description'), 'SEO description', false, 500),
+        );
+        if (problem) return showToast(problem);
         this.save(form.querySelector('button[type="submit"]'), 'Listing draft saved.', () => this.updateListing(i.listing.id, {
           title: t('title'), description: t('description'), specifications: t('specifications'),
           seo_title: t('seo_title'), seo_description: t('seo_description'), sales_channels: fd.getAll('channel'),
