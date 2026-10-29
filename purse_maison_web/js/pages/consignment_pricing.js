@@ -174,16 +174,18 @@ Object.assign(ConsignmentFlow, {
     on('price-suggest', (btn) => { input.value = btn.dataset.price; this.updatePricePreview(i); });
     on('price-save', (btn) => {
       const price = Number(input.value);
-      if (!(price > 0)) return showToast('Enter the selling price.');
-      const problem = Validate.amount(input.value, 'Selling price');
-      if (problem) return showToast(problem);
-      if (!this.previewMarkup(price, i.category)) return showToast('No markup tier covers this price. Choose a price in a covered range.');
+      const problem = Validate.amount(input.value, 'Selling price')
+        || (this.previewMarkup(price, i.category) ? null : 'No markup tier covers this price. Choose a price in a covered range.');
+      if (Validate.show(null, [[input, problem]])) return;
       this.save(btn, `Price saved: ${this.peso(price)}.`, () => this.updateItem(i.id, { price }));
     });
     on('price-confirm', (btn) => {
-      const approved = document.getElementById('price-approved').checked;
-      const confirmed = document.getElementById('payout-confirmed').checked;
-      if (!approved || !confirmed) return showToast('Tick both "Final price approved" and "Consignor payout confirmed".');
+      const approvedEl = document.getElementById('price-approved');
+      const confirmedEl = document.getElementById('payout-confirmed');
+      if (Validate.show(null, [
+        [approvedEl.closest('label'), approvedEl.checked ? null : 'Tick "Final price approved".'],
+        [confirmedEl.closest('label'), confirmedEl.checked ? null : 'Tick "Consignor payout confirmed".'],
+      ])) return;
       this.save(btn, `${i.code} priced at ${this.peso(i.price)} and sent to Listing Creation.`,
         () => this.updateItem(i.id, { price_approved: true, payout_confirmed: true }));
     });

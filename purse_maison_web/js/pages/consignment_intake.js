@@ -501,7 +501,7 @@ const ConsignmentFlow = {
           </div>
           <div class="section-grid">
             <div class="field-group col-wide"><label class="field-label">Phone</label><input class="field-input" name="phone" placeholder="e.g. 0917 123 4567"></div>
-            <div class="field-group col-wide"><label class="field-label">Email</label><input class="field-input" name="email" type="email" placeholder="e.g. superadmin@gmail.com"></div>
+            <div class="field-group col-wide"><label class="field-label">Email</label><input class="field-input" name="email" type="email" placeholder="e.g. mariasantos@gmail.com"></div>
           </div>
           <div class="section-grid">
             <div class="field-group col-wide"><label class="field-label">Brand</label><input class="field-input" name="brand" required placeholder="e.g. Chanel"></div>
@@ -627,23 +627,23 @@ const ConsignmentFlow = {
       const asking = Number(document.getElementById('neg-asking').value) || null;
       const counter = Number(document.getElementById('neg-counter').value) || null;
       const notes = document.getElementById('neg-notes').value.trim() || null;
-      if (!asking && !counter) return showToast('Enter an asking price or a counteroffer.');
-      const problem = Validate.first(
-        Validate.amount(document.getElementById('neg-asking').value, 'Asking price', false),
-        Validate.amount(document.getElementById('neg-counter').value, 'Counteroffer', false),
-        Validate.notes(notes, 'Notes'),
-      );
-      if (problem) return showToast(problem);
+      const askingEl = document.getElementById('neg-asking');
+      const counterEl = document.getElementById('neg-counter');
+      const neither = !askingEl.value.trim() && !counterEl.value.trim();
+      if (Validate.show(null, [
+        [askingEl, neither ? 'Enter an asking price or a counteroffer.' : Validate.amount(askingEl.value, 'Asking price', false)],
+        [counterEl, neither ? null : Validate.amount(counterEl.value, 'Counteroffer', false)],
+        [document.getElementById('neg-notes'), Validate.notes(notes, 'Notes')],
+      ])) return;
       this.save(btn, 'Negotiation logged.', async () => {
         const { error } = await sbClient.from('price_negotiations').insert({ item_id: i.id, asking_price: asking, counter_offer: counter, notes });
         if (error) throw error;
       });
     });
     on('neg-save-payout', (btn) => {
-      const v = Number(document.getElementById('neg-payout').value);
-      if (!(v > 0)) return showToast('Enter the agreed payout amount.');
-      const problem = Validate.amount(document.getElementById('neg-payout').value, 'Agreed payout');
-      if (problem) return showToast(problem);
+      const payoutEl = document.getElementById('neg-payout');
+      const v = Number(payoutEl.value);
+      if (Validate.show(null, [[payoutEl, Validate.amount(payoutEl.value, 'Agreed payout')]])) return;
       this.save(btn, 'Agreed payout saved.', () => this.updateItem(i.id, { agreed_payout: v }));
     });
     const apptInput = document.getElementById('pre-appointment');
@@ -652,12 +652,10 @@ const ConsignmentFlow = {
     on('pre-save-appointment', (btn) => {
       const method = document.getElementById('pre-fulfillment').value || null;
       const when = document.getElementById('pre-appointment').value;
-      if (!method) return showToast('Choose a fulfillment method.');
-      if (!when) return showToast('Choose the appointment date and time.');
-      if (when !== savedAppt) {
-        const problem = Validate.futureDateTime(when, 'Appointment date and time');
-        if (problem) return showToast(problem);
-      }
+      if (Validate.show(null, [
+        [document.getElementById('pre-fulfillment'), method ? null : 'Choose a fulfillment method.'],
+        [apptInput, !when ? 'Choose the appointment date and time.' : (when !== savedAppt ? Validate.futureDateTime(when, 'Appointment date and time') : null)],
+      ])) return;
       this.save(btn, 'Appointment saved.', () => this.updateItem(i.id, { fulfillment_method: method, appointment_at: new Date(when).toISOString() }));
     });
     on('pre-advance', (btn) => {
@@ -681,29 +679,29 @@ const ConsignmentFlow = {
     const text = (k) => String(fd.get(k) || '').trim();
     const consignorText = text('consignor');
     const brand = text('brand');
-    if (!consignorText || !brand) return showToast('Consignor and brand are required.');
     const phone = Validate.normalizePhone(text('phone'));
     const email = text('email').toLowerCase();
+    const field = (name) => form.querySelector(`[name="${name}"]`);
 
     // Existing consignor picked from the list?
     let consignor = DB.consignorList.find((c) => this.consignorOption(c) === consignorText);
-    const problem = Validate.first(
-      consignor ? null : Validate.personName(consignorText, 'Consignor name'),
-      consignor ? null : Validate.phone(phone),
-      consignor ? null : Validate.email(email),
-      Validate.itemText(brand, 'Brand', true),
-      Validate.itemText(text('model'), 'Model'),
-      Validate.amount(text('asking'), 'Asking price', false),
-      Validate.notes(text('notes'), 'Internal notes'),
-    );
-    if (problem) return showToast(problem);
+    if (Validate.show(form, [
+      [field('consignor'), consignor ? null : Validate.personName(consignorText, 'Consignor name')],
+      [field('phone'), consignor ? null : Validate.phone(phone)],
+      [field('email'), consignor ? null : Validate.email(email)],
+      [field('brand'), Validate.itemText(brand, 'Brand', true)],
+      [field('model'), Validate.itemText(text('model'), 'Model')],
+      [field('asking'), Validate.amount(text('asking'), 'Asking price', false)],
+      [field('notes'), Validate.notes(text('notes'), 'Internal notes')],
+    ])) return;
     if (!consignor) {
       // Duplicate detection for new consignors: same phone, email, or exact name
       const norm = (s) => String(s || '').replace(/\s+/g, '').toLowerCase();
       const dup = DB.consignorList.find((c) =>
         (phone && norm(c.phone) === norm(phone)) || (email && norm(c.email) === norm(email)) || norm(c.full_name) === norm(consignorText));
       if (dup) {
-        return showToast(`Possible duplicate: "${this.consignorOption(dup)}" already exists. Pick them from the consignor list instead.`);
+        Validate.show(form, [[field('consignor'), `Possible duplicate: "${this.consignorOption(dup)}" already exists. Pick them from the consignor list instead.`]]);
+        return;
       }
     }
 
@@ -835,7 +833,7 @@ const ConsignmentFlow = {
             </div>
             <div class="field-group">
               <label class="field-label">Accessories Included</label>
-              <div style="display:flex; gap:14px; flex-wrap:wrap; margin-top:4px;">
+              <div id="int-accessories" style="display:flex; gap:14px; flex-wrap:wrap; margin-top:4px;">
                 ${ACCESSORY_OPTIONS.map((a) => `<label style="font-size:13px; display:flex; gap:6px; align-items:center;"><input type="checkbox" name="acc" value="${a}" ${i.accessories.includes(a) ? 'checked' : ''} ${dis || (lockDetails ? 'disabled' : '')}> ${a}</label>`).join('')}
                 <label style="font-size:13px; display:flex; gap:6px; align-items:center;"><input type="checkbox" name="acc" value="None" ${i.accessories.includes('None') ? 'checked' : ''} ${dis || (lockDetails ? 'disabled' : '')}> None</label>
               </div>
@@ -936,8 +934,7 @@ const ConsignmentFlow = {
     on('int-verify-id', (btn) => {
       const file = document.getElementById('int-id-file').files[0];
       const idType = document.getElementById('int-id-type').value;
-      const problem = this.checkFile(file, true);
-      if (problem) return showToast(problem);
+      if (Validate.show(null, [[document.getElementById('int-id-file'), this.checkFile(file, true)]])) return;
       this.save(btn, 'Consignor ID verified.', async () => {
         const path = `${i.consignor.id}/id-${Date.now()}.${this.extOf(file)}`;
         const up = await sbClient.storage.from('consignor-ids').upload(path, file, { contentType: file.type });
@@ -958,25 +955,26 @@ const ConsignmentFlow = {
         const fd = new FormData(form);
         const t = (k) => String(fd.get(k) || '').trim() || null;
         let acc = fd.getAll('acc');
-        if (acc.includes('None') && acc.length > 1) return showToast('Untick "None" when accessories are included.');
         const serial = t('serial');
         const microchip = t('microchip');
-        const problem = Validate.first(
-          Validate.itemText(t('brand'), 'Brand', true),
-          Validate.itemText(t('model'), 'Model'),
-          Validate.itemText(t('color'), 'Color'),
-          Validate.itemText(t('hardware'), 'Hardware'),
-          Validate.code(serial, 'Serial number'),
-          Validate.code(microchip, 'Microchip number'),
-          Validate.itemText(t('dateCode'), 'Date code'),
-          Validate.notes(t('conditionNotes'), 'Condition notes'),
-        );
-        if (problem) return showToast(problem);
+        const field = (name) => form.querySelector(`[name="${name}"]`);
+        if (Validate.show(form, [
+          [field('brand'), Validate.itemText(t('brand'), 'Brand', true)],
+          [field('model'), Validate.itemText(t('model'), 'Model')],
+          [field('color'), Validate.itemText(t('color'), 'Color')],
+          [field('hardware'), Validate.itemText(t('hardware'), 'Hardware')],
+          [field('serial'), Validate.code(serial, 'Serial number')],
+          [field('microchip'), Validate.code(microchip, 'Microchip number')],
+          [field('dateCode'), Validate.itemText(t('dateCode'), 'Date code')],
+          [field('conditionNotes'), Validate.notes(t('conditionNotes'), 'Condition notes')],
+          [document.getElementById('int-accessories'), acc.includes('None') && acc.length > 1 ? 'Untick "None" when accessories are included.' : null],
+        ])) return;
         const norm = (s) => String(s || '').trim().toLowerCase();
-        const dup = DB.pipelineItems.find((o) => o.id !== i.id && (
-          (serial && (norm(o.serial) === norm(serial) || norm(o.microchip) === norm(serial))) ||
-          (microchip && (norm(o.microchip) === norm(microchip) || norm(o.serial) === norm(microchip)))));
-        if (dup) return showToast(`Possible duplicate: ${dup.code} (${this.itemName(dup)}) already has this serial or microchip number.`);
+        const dupOf = (code) => code && DB.pipelineItems.find((o) => o.id !== i.id && (norm(o.serial) === norm(code) || norm(o.microchip) === norm(code)));
+        const dupSerial = dupOf(serial);
+        const dupChip = dupOf(microchip);
+        const dupMsg = (d) => d && `Possible duplicate: ${d.code} (${this.itemName(d)}) already has this serial or microchip number.`;
+        if (Validate.show(form, [[field('serial'), dupMsg(dupSerial)], [field('microchip'), dupMsg(dupChip)]])) return;
         this.save(form.querySelector('button[type="submit"]'), 'Item details saved.', () => this.updateItem(i.id, {
           brand: t('brand'), model: t('model'), color: t('color'), category: t('category'), hardware: t('hardware'),
           serial_number: serial, microchip_number: microchip, date_code: t('dateCode'),
@@ -987,7 +985,8 @@ const ConsignmentFlow = {
 
     on('int-sign', (btn) => {
       const sig = window.getSignatureData ? window.getSignatureData() : null;
-      if (!sig) return showToast('Ask the consignor to sign in the box first.');
+      const pad = document.querySelector('.signature-container');
+      if (Validate.show(null, [[pad, sig ? null : 'Ask the consignor to sign in the box first.']])) return;
       this.save(btn, 'Agreement signed and attached.', async () => {
         const { data, error } = await sbClient.from('consignment_agreements')
           .insert({ consignor_id: i.consignor.id, signature_data: sig }).select('id').single();
@@ -1017,10 +1016,9 @@ const ConsignmentFlow = {
     });
 
     on('int-confirm-payment', (btn) => {
-      const ref = document.getElementById('int-pay-ref').value.trim();
-      if (!ref) return showToast('Enter the QR PH reference number.');
-      const problem = Validate.code(ref, 'QR PH reference number', true);
-      if (problem) return showToast(problem);
+      const refEl = document.getElementById('int-pay-ref');
+      const ref = refEl.value.trim();
+      if (Validate.show(null, [[refEl, Validate.code(ref, 'QR PH reference number', true)]])) return;
       this.save(btn, `Payment confirmed. ${i.code} is now in the authentication queue.`, async () => {
         const { data, error } = await sbClient.from('authentication_records')
           .update({ payment_status: 'confirmed', payment_reference: ref }).eq('item_id', i.id).select('id');

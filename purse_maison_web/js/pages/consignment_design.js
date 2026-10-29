@@ -191,7 +191,7 @@ Object.assign(ConsignmentFlow, {
                 <input class="field-input" name="seo_description" value="${escapeHtml(l.seo_description || '')}" ${dis}></div>
             </div>
             <div class="field-group"><label class="field-label">Sales Channels</label>
-              <div style="display:flex; gap:16px; flex-wrap:wrap;">
+              <div id="listing-channels" style="display:flex; gap:16px; flex-wrap:wrap;">
                 ${Object.entries(SALES_CHANNELS).map(([v, lab]) => `<label style="font-size:13px; display:flex; gap:6px; align-items:center;">
                   <input type="checkbox" name="channel" value="${v}" ${channels.includes(v) ? 'checked' : ''} ${dis}> ${lab}</label>`).join('')}
               </div>
@@ -200,7 +200,7 @@ Object.assign(ConsignmentFlow, {
               <div><strong>Added automatically:</strong> ${escapeHtml(l.authenticity_footer || '(authenticity footer not set)')}</div>
               <div style="margin-top:4px;">${layaway ? `<strong>Layaway clause (price ₱200,000+):</strong> ${escapeHtml(l.layaway_clause || '(layaway wording not set)')}` : 'No layaway clause (price below ₱200,000).'}</div>
             </div>
-            ${act ? '<button type="submit" class="btn-secondary" style="margin-top:12px;">Save Draft</button>' : ''}
+            ${act ? '<button type="submit" class="btn-secondary" style="margin-top:12px;">Save</button>' : ''}
           </form>
         </div>
 
@@ -271,10 +271,9 @@ Object.assign(ConsignmentFlow, {
       () => this.updateItem(i.id, { photos_approved: true })));
 
     on('design-return', (btn) => {
-      const note = document.getElementById('design-revision-note').value.trim();
-      if (!note) return showToast('Write what needs to be reshot.');
-      const problem = Validate.notes(note, 'Revision note');
-      if (problem) return showToast(problem);
+      const noteEl = document.getElementById('design-revision-note');
+      const note = noteEl.value.trim();
+      if (Validate.show(null, [[noteEl, note ? Validate.notes(note, 'Revision note') : 'Write what needs to be reshot.']])) return;
       this.save(btn, `${i.code} returned to the photographer.`,
         () => this.updateItem(i.id, { current_stage: 'photography', photo_revision_note: note }));
     });
@@ -284,20 +283,20 @@ Object.assign(ConsignmentFlow, {
     if (form && i.listing) {
       on('listing-fill', () => {
         form.querySelector('[name="description"]').value = this.composeDescription(i);
-        showToast('Description filled in. Review it, then Save Draft.');
+        showToast('Description filled in. Review it, then Save.');
       });
       form.addEventListener('submit', (e) => {
         e.preventDefault();
         const fd = new FormData(form);
         const t = (k) => String(fd.get(k) || '').trim() || null;
-        const problem = Validate.first(
-          Validate.itemText(t('title'), 'Title', false, 150),
-          Validate.notes(t('description'), 'Description', false, 5000),
-          Validate.notes(t('specifications'), 'Specifications', false, 5000),
-          Validate.itemText(t('seo_title'), 'SEO title', false, 150),
-          Validate.notes(t('seo_description'), 'SEO description', false, 500),
-        );
-        if (problem) return showToast(problem);
+        const field = (name) => form.querySelector(`[name="${name}"]`);
+        if (Validate.show(form, [
+          [field('title'), Validate.itemText(t('title'), 'Title', false, 150)],
+          [field('description'), Validate.notes(t('description'), 'Description', false, 5000)],
+          [field('specifications'), Validate.notes(t('specifications'), 'Specifications', false, 5000)],
+          [field('seo_title'), Validate.itemText(t('seo_title'), 'SEO title', false, 150)],
+          [field('seo_description'), Validate.notes(t('seo_description'), 'SEO description', false, 500)],
+        ])) return;
         this.save(form.querySelector('button[type="submit"]'), 'Listing draft saved.', () => this.updateListing(i.listing.id, {
           title: t('title'), description: t('description'), specifications: t('specifications'),
           seo_title: t('seo_title'), seo_description: t('seo_description'), sales_channels: fd.getAll('channel'),
@@ -305,11 +304,11 @@ Object.assign(ConsignmentFlow, {
       });
       on('listing-submit', (btn) => {
         const l = i.listing;
-        const missing = [];
-        if (!(l.title && l.title.trim())) missing.push('title');
-        if (!(l.description && l.description.trim())) missing.push('description');
-        if (!(l.sales_channels || []).length) missing.push('a sales channel');
-        if (missing.length) return showToast(`Save the listing with ${missing.join(', ')} first.`);
+        if (Validate.show(form, [
+          [form.querySelector('[name="title"]'), l.title && l.title.trim() ? null : 'Enter a title, then click Save.'],
+          [form.querySelector('[name="description"]'), l.description && l.description.trim() ? null : 'Enter a description, then click Save.'],
+          [document.getElementById('listing-channels'), (l.sales_channels || []).length ? null : 'Tick at least one sales channel, then click Save.'],
+        ])) return;
         this.save(btn, `${i.code} listing submitted. The manager can now publish it.`,
           () => this.updateListing(l.id, { submitted_at: new Date().toISOString() }));
       });

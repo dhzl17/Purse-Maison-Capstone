@@ -356,13 +356,16 @@ const ClientsPage = {
   },
 
   /** Saves a new or edited inquiry. Returns true on success. */
-  async saveInquiry(existing, fd) {
+  async saveInquiry(existing, fd, form) {
     const text = (k) => String(fd.get(k) || '').trim();
     const name = text('clientName');
-    if (!name) { showToast('Please enter the client name.'); return false; }
     const phone = Validate.normalizePhone(text('phone'));
-    const problem = Validate.first(Validate.personName(name, 'Client name'), Validate.phone(phone), Validate.email(text('email')));
-    if (problem) { showToast(problem); return false; }
+    const field = (n) => form.querySelector(`[name="${n}"]`);
+    if (Validate.show(form, [
+      [field('clientName'), Validate.personName(name, 'Client name')],
+      [field('phone'), Validate.phone(phone)],
+      [field('email'), Validate.email(text('email'))],
+    ])) return false;
 
     try {
       if (!existing) {

@@ -268,10 +268,11 @@ Object.assign(ConsignmentFlow, {
     type.addEventListener('change', summary); months.addEventListener('change', summary); summary();
     overlay.querySelector('#sale-save').addEventListener('click', (e) => {
       const buyer = overlay.querySelector('#sale-buyer').value.trim();
-      if (!buyer) return showToast("Enter the buyer's name.");
       const buyerPhone = Validate.normalizePhone(overlay.querySelector('#sale-phone').value);
-      const problem = Validate.first(Validate.personName(buyer, 'Buyer name'), Validate.phone(buyerPhone, 'Buyer phone number'));
-      if (problem) return showToast(problem);
+      if (Validate.show(overlay, [
+        [overlay.querySelector('#sale-buyer'), Validate.personName(buyer, 'Buyer name')],
+        [overlay.querySelector('#sale-phone'), Validate.phone(buyerPhone, 'Buyer phone number')],
+      ])) return;
       const lay = type.value === 'layaway';
       this.save(e.target, `Sale recorded for ${i.code}.`, async () => {
         const { error } = await sbClient.from('sales_transactions').insert({
@@ -301,10 +302,9 @@ Object.assign(ConsignmentFlow, {
         </div>`,
     });
     overlay.querySelector('#inst-save').addEventListener('click', (e) => {
-      const amount = Number(overlay.querySelector('#inst-amount').value);
-      if (!(amount > 0)) return showToast('Enter the amount received.');
-      const problem = Validate.amount(overlay.querySelector('#inst-amount').value, 'Amount received', true, 2);
-      if (problem) return showToast(problem);
+      const amountEl = overlay.querySelector('#inst-amount');
+      const amount = Number(amountEl.value);
+      if (Validate.show(overlay, [[amountEl, Validate.amount(amountEl.value, 'Amount received', true, 2)]])) return;
       this.save(e.target, `Payment of ${this.peso(amount)} recorded.`, async () => {
         const { error } = await sbClient.from('layaway_payments').insert({ sale_id: s.id, amount });
         if (error) throw error;
@@ -323,16 +323,17 @@ Object.assign(ConsignmentFlow, {
         <div class="field-group"><label class="field-label">Extend by</label>
           <select class="field-input" id="ext-days"><option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option></select></div>
         <div class="field-group"><label class="field-label">Notes</label><input class="field-input" id="ext-notes" placeholder="e.g. Agreed by phone on Oct 9"></div>
-        <label style="display:flex; gap:8px; align-items:center; font-size:13px;"><input type="checkbox" id="ext-agreed"> The consignor agreed to this extension</label>
+        <label id="ext-agreed-row" style="display:flex; gap:8px; align-items:center; font-size:13px;"><input type="checkbox" id="ext-agreed"> The consignor agreed to this extension</label>
         <div class="modal-actions">
           <button class="btn-secondary" data-close-modal>Cancel</button>
           <button class="btn-confirm" id="ext-save">Submit</button>
         </div>`,
     });
     overlay.querySelector('#ext-save').addEventListener('click', (e) => {
-      if (!overlay.querySelector('#ext-agreed').checked) return showToast('An extension needs the consignor\'s agreement.');
-      const problem = Validate.notes(overlay.querySelector('#ext-notes').value, 'Notes');
-      if (problem) return showToast(problem);
+      if (Validate.show(overlay, [
+        [overlay.querySelector('#ext-notes'), Validate.notes(overlay.querySelector('#ext-notes').value, 'Notes')],
+        [overlay.querySelector('#ext-agreed-row'), overlay.querySelector('#ext-agreed').checked ? null : 'An extension needs the consignor\'s agreement.'],
+      ])) return;
       const days = Number(overlay.querySelector('#ext-days').value);
       this.save(e.target, `${i.code} extended by ${days} days.`, async () => {
         const { error } = await sbClient.from('contract_extensions').insert({

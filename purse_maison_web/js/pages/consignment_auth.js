@@ -250,8 +250,9 @@ Object.assign(ConsignmentFlow, {
 
     document.querySelectorAll('[data-auth-record]').forEach((btn) => btn.addEventListener('click', () => {
       const slot = btn.dataset.authRecord;
-      const v = document.getElementById(`auth-result-${slot}`).value;
-      if (!v) return showToast('Choose Authentic or Fake.');
+      const select = document.getElementById(`auth-result-${slot}`);
+      const v = select.value;
+      if (Validate.show(null, [[select, v ? null : 'Choose Authentic or Fake.']])) return;
       const go = () => this.save(btn, `${slotName(slot)} result recorded: ${AUTH_RESULTS[v]}.`, async () => {
         await this.updateAuth(a.id, { [`${slot}_result`]: v });
         const fresh = await sbClient.from('consignment_items').select('current_stage').eq('id', i.id).single();
@@ -265,8 +266,7 @@ Object.assign(ConsignmentFlow, {
 
     on('auth-upload-cert', (btn) => {
       const file = document.getElementById('auth-cert-file').files[0];
-      const problem = this.checkFile(file, true);
-      if (problem) return showToast(problem);
+      if (Validate.show(null, [[document.getElementById('auth-cert-file'), this.checkFile(file, true)]])) return;
       this.save(btn, 'Certificate uploaded.', async () => {
         const path = `${i.id}/certificate-${Date.now()}.${this.extOf(file)}`;
         const up = await sbClient.storage.from('certificates').upload(path, file, { contentType: file.type });

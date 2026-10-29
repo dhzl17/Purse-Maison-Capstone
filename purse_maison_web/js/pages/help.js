@@ -794,10 +794,10 @@ const HelpPage = {
     const fd = new FormData(form);
     const subject = String(fd.get('subject') || '').trim();
     const description = String(fd.get('description') || '').trim();
-    if (subject.length < 3) return showToast('Enter a subject (at least 3 characters).');
-    if (description.length < 10) return showToast('Describe the problem (at least 10 characters).');
-    const problem = Validate.first(Validate.notes(subject, 'Subject', true, 120), Validate.notes(description, 'Description', true, 2000));
-    if (problem) return showToast(problem);
+    if (Validate.show(form, [
+      [form.querySelector('[name="subject"]'), subject && subject.length < 3 ? 'Enter a subject (at least 3 characters).' : Validate.notes(subject, 'Subject', true, 120)],
+      [form.querySelector('[name="description"]'), description && description.length < 10 ? 'Describe the problem (at least 10 characters).' : Validate.notes(description, 'Description', true, 2000)],
+    ])) return;
 
     const btn = form.querySelector('#ticket-submit');
     btn.disabled = true;
@@ -1032,4 +1032,4 @@ const HelpPage = {
       this.drawTicketLists();
     });
   },
-};
+};

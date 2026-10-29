@@ -194,26 +194,29 @@ Object.assign(ConsignmentFlow, {
     });
 
     const notesProblem = () => Validate.notes(notes(), 'Notes');
+    const notesEl = () => document.getElementById('mgr-notes');
+    const panel = (btn) => btn.closest('.card');
 
     on('mgr-approve', (btn) => {
-      if (notesProblem()) return showToast(notesProblem());
+      if (Validate.show(panel(btn), [[notesEl(), notesProblem()]])) return;
       decide(btn, 'approved', { notes: notes() || null }, `${i.code} approved and sent to Pricing.`);
     });
 
     on('mgr-return', (btn) => {
-      const reason = document.getElementById('mgr-return-reason').value;
-      if (!reason) return showToast('Choose what needs fixing: Photos or Item details.');
+      const reasonEl = document.getElementById('mgr-return-reason');
+      const reason = reasonEl.value;
       const n = notes();
-      if (!n) return showToast('Write a note so the team knows what to fix.');
-      if (notesProblem()) return showToast(notesProblem());
+      if (Validate.show(panel(btn), [
+        [reasonEl, reason ? null : 'Choose what needs fixing: Photos or Item details.'],
+        [notesEl(), n ? notesProblem() : 'Write a note so the team knows what to fix.'],
+      ])) return;
       decide(btn, 'returned_for_revision', { return_reason: reason, notes: n },
         reason === 'photos' ? `${i.code} returned to Design.` : `${i.code} returned to the Consignment Team for item details.`);
     });
 
     on('mgr-reject', (btn) => {
       const n = notes();
-      if (!n) return showToast('Write the reason for rejecting this item.');
-      if (notesProblem()) return showToast(notesProblem());
+      if (Validate.show(panel(btn), [[notesEl(), n ? notesProblem() : 'Write the reason for rejecting this item.']])) return;
       this.confirm('Reject this item?', `${i.code} will be closed as not accepted and should be returned to the consignor. This cannot be undone.`,
         'Reject Item', () => decide(btn, 'rejected', { notes: n }, `${i.code} rejected.`));
     });

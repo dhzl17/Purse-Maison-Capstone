@@ -261,10 +261,9 @@ const SettingsPage = {
     document.getElementById('account-info-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = e.target.querySelector('button[type="submit"]');
-      const fullName = document.getElementById('settings-fullname').value.trim();
-      if (!fullName) return showToast('Enter your full name.');
-      const problem = Validate.personName(fullName, 'Full name');
-      if (problem) return showToast(problem);
+      const nameEl = document.getElementById('settings-fullname');
+      const fullName = nameEl.value.trim();
+      if (Validate.show(e.target, [[nameEl, Validate.personName(fullName, 'Full name')]])) return;
       btn.disabled = true;
       const { error } = await sbClient.rpc('update_my_profile', { new_full_name: fullName, new_preferences: null });
       btn.disabled = false;
@@ -280,9 +279,13 @@ const SettingsPage = {
       const fd = new FormData(form);
       const current = String(fd.get('current') || '');
       const next = String(fd.get('new') || '');
-      if (next.length < MIN_PASSWORD_LENGTH) return showToast(`The new password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
-      if (next !== fd.get('confirm')) return showToast('New passwords do not match.');
-      if (next === current) return showToast('The new password must be different from the current one.');
+      const confirm = String(fd.get('confirm') || '');
+      const field = (name) => form.querySelector(`[name="${name}"]`);
+      if (Validate.show(form, [
+        [field('current'), current ? null : 'Enter your current password.'],
+        [field('new'), Validate.passwordRules(next, MIN_PASSWORD_LENGTH, current)],
+        [field('confirm'), !confirm ? 'Type the new password again.' : (confirm !== next ? 'Passwords do not match.' : null)],
+      ])) return;
       const btn = form.querySelector('button[type="submit"]');
       btn.disabled = true;
       try {
@@ -293,7 +296,8 @@ const SettingsPage = {
         form.reset();
         showToast('Password updated. Use the new password next time you log in.');
       } catch (err) {
-        showToast(err.message || 'Could not update the password.');
+        if (err.message === 'The current password is incorrect.') Validate.show(form, [[field('current'), err.message]]);
+        else showToast(err.message || 'Could not update the password.');
       } finally {
         btn.disabled = false;
       }
@@ -424,8 +428,14 @@ const SettingsPage = {
       const password = String(fd.get('password') || '');
       const role = String(fd.get('role') || '');
       const btn = e.target.querySelector('button[type="submit"]');
-      const problem = Validate.personName(fullName, 'Full name');
-      if (problem) return showToast(problem);
+      const form = e.target;
+      const field = (name) => form.querySelector(`[name="${name}"]`);
+      if (Validate.show(form, [
+        [field('fullname'), Validate.personName(fullName, 'Full name')],
+        [field('username'), !username ? 'Enter a username.'
+          : (/^[a-z0-9._-]{3,30}$/.test(username) ? null : 'Use 3–30 lowercase letters, numbers, dots (.), dashes (-) or underscores (_). No spaces.')],
+        [field('password'), Validate.passwordRules(password, MIN_PASSWORD_LENGTH)],
+      ])) return;
       btn.disabled = true;
       try {
         await this.callStaffAdmin({ action: 'create', username, full_name: fullName, role, password });
@@ -434,7 +444,12 @@ const SettingsPage = {
         this.loadTeam();
       } catch (err) {
         btn.disabled = false;
-        showToast(err.message);
+        // Errors about one field from the staff-admin function are shown under that field
+        const msg = err.message || 'Could not create the account.';
+        if (/username/i.test(msg)) Validate.show(form, [[field('username'), msg]]);
+        else if (/password/i.test(msg)) Validate.show(form, [[field('password'), msg]]);
+        else if (/full name/i.test(msg)) Validate.show(form, [[field('fullname'), msg]]);
+        else showToast(msg);
       }
     });
   },

@@ -35,6 +35,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   loginForm.addEventListener('submit', (e) => {
     e.preventDefault();
+    loginError.classList.add('hidden');
+    if (Validate.show(loginForm, [
+      [usernameInput, usernameInput.value.trim() ? null : 'Enter your username.'],
+      [passwordInput, passwordInput.value ? null : 'Enter your password.'],
+    ])) return;
     performLogin(usernameInput.value, passwordInput.value);
   });
 
@@ -48,6 +53,10 @@ document.addEventListener('DOMContentLoaded', () => {
     loginSubmitBtn.textContent = 'Log In';
 
     if (error) {
+      if (error === 'Invalid username or password') {
+        Validate.show(loginForm, [[usernameInput, true], [passwordInput, 'Invalid username or password.']]);
+        return;
+      }
       loginError.textContent = error;
       loginError.classList.remove('hidden');
       return;
