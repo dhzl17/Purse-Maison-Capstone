@@ -229,11 +229,11 @@ const ForecastingPage = {
         </div>
         <div class="chart-card col-narrow">
           <div class="card-title" style="margin-bottom:14px;">Prediction Alerts</div>
-          ${pageAlerts.map((a) => `
+          <div class="alerts-list">${pageAlerts.map((a) => `
             <div class="feed-item">
               <div class="feed-desc">${escapeHtml(a.description)}</div>
               <div class="feed-time">${escapeHtml(a.timestamp)}</div>
-            </div>`).join('') || `<p class="cell-muted">${this.hasActiveFilter() ? 'No alerts for the selected filters.' : 'No alerts yet.'}</p>`}
+            </div>`).join('') || `<p class="cell-muted">${this.hasActiveFilter() ? 'No alerts for the selected filters.' : 'No alerts yet.'}</p>`}</div>
           ${alertPages > 1 ? `<div class="pagination" id="alerts-pagination">${renderPaginationButtons(this.alertPage, alertPages)}</div>` : ''}
         </div>
       </div>

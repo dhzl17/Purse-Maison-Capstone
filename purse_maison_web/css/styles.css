@@ -434,7 +434,7 @@ img { max-width: 100%; display: block; }
 /* ==========================================================================
    Tables
    ========================================================================== */
-.table-scroll { overflow-x: auto; border-radius: 14px; border: 1px solid var(--border-light); }
+.table-scroll { overflow-x: auto; border-radius: 14px; border: 1px solid var(--border-light); background: #fff; }
 table.data-table { width: 100%; border-collapse: collapse; min-width: 720px; background: #fff; }
 table.data-table thead { background: var(--card-navy-dark); }
 table.data-table th {
@@ -662,7 +662,9 @@ table.data-table tbody tr.filler-row td { border: 0 !important; padding: 0 !impo
 
 .pagination { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; width: 100%; max-width: 100%; }
 .pagination .page-numbers { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
-.pagination .page-ellipsis { min-width: 20px; text-align: center; color: var(--text-muted); font-size: 13px; user-select: none; }
+.pagination .page-numbers > button,
+.pagination .page-numbers > .page-ellipsis { flex: none; width: 36px; min-width: 36px; padding: 0; }
+.col-narrow .pagination .page-numbers > .page-ellipsis { width: 30px; min-width: 30px; }
 
 .pagination .page-nav {
   height: 36px;

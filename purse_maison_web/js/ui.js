@@ -176,8 +176,8 @@ function renderUniversalSearchBar(inputId, placeholder = 'Search by ID, Brand, N
 
 function buildPageList(current, total) {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-  if (current <= 3) return [1, 2, 3, 4, '…', total];
-  if (current >= total - 2) return [1, '…', total - 3, total - 2, total - 1, total];
+  if (current <= 4) return [1, 2, 3, 4, 5, '…', total];
+  if (current >= total - 3) return [1, '…', total - 4, total - 3, total - 2, total - 1, total];
   return [1, '…', current - 1, current, current + 1, '…', total];
 }
 
@@ -197,6 +197,45 @@ function renderPaginationButtons(current, total) {
       <span class="page-nav-label">Next</span><span class="page-nav-arrow">⟶</span>
     </button>`;
 }
+
+function pagerSelector(pager) {
+  if (pager.id) return `#${pager.id}`;
+  if (pager.dataset.salesPager) return `.pagination[data-sales-pager="${pager.dataset.salesPager}"]`;
+  const owner = pager.parentElement && pager.parentElement.closest('[id]');
+  return owner ? `#${owner.id} .pagination` : null;
+}
+
+function scrollParentOf(el) {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight) return p;
+  }
+  return null; // the window scrolls
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.pagination [data-page]');
+  if (!btn || btn.disabled) return;
+  const pager = btn.closest('.pagination');
+  const selector = pagerSelector(pager);
+  if (!selector) return;
+  const list = pager.previousElementSibling;
+  const listHeight = list ? list.getBoundingClientRect().height : 0;
+  const top = pager.getBoundingClientRect().top;
+  requestAnimationFrame(() => {
+    const fresh = document.querySelector(selector);
+    if (!fresh) return;
+    const freshList = fresh.previousElementSibling;
+    if (freshList && listHeight && freshList.getBoundingClientRect().height < listHeight) {
+      freshList.style.minHeight = `${listHeight}px`;
+    }
+    const shift = fresh.getBoundingClientRect().top - top;
+    if (Math.abs(shift) >= 1) {
+      const scroller = scrollParentOf(fresh);
+      if (scroller) scroller.scrollTop += shift; else window.scrollBy(0, shift);
+    }
+  });
+}, true);
 
 function fillerRows(rendered, pageSize, colCount, totalPages) {
   const n = pageSize - rendered;
