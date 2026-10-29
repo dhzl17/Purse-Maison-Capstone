@@ -201,7 +201,7 @@ const ForecastingPage = {
         </div>
       </div>
 
-      <div class="section-grid">
+        <div class="section-grid fc-bottom-row">
         <div class="chart-card col-wide">
           <div class="toolbar-row" style="margin-bottom:12px;">
             <span class="card-title">Brand Forecasts</span>
@@ -227,14 +227,15 @@ const ForecastingPage = {
           </div>
           ${totalPages > 1 ? `<div class="pagination" id="forecast-pagination">${renderPaginationButtons(this.page, totalPages)}</div>` : ''}
         </div>
-        <div class="chart-card col-narrow">
-          <div class="card-title" style="margin-bottom:14px;">Prediction Alerts</div>
-          <div class="alerts-list">${pageAlerts.map((a) => `
-            <div class="feed-item">
-              <div class="feed-desc">${escapeHtml(a.description)}</div>
-              <div class="feed-time">${escapeHtml(a.timestamp)}</div>
-            </div>`).join('') || `<p class="cell-muted">${this.hasActiveFilter() ? 'No alerts for the selected filters.' : 'No alerts yet.'}</p>`}</div>
-          ${alertPages > 1 ? `<div class="pagination" id="alerts-pagination">${renderPaginationButtons(this.alertPage, alertPages)}</div>` : ''}
+        <div class="chart-card col-narrow fc-alerts-card">
+          <div class="card-title" style="margin-bottom:14px;">Prediction Alerts${alerts.length ? ` (${alerts.length})` : ''}</div>
+          <div class="alerts-scroll">
+            <div class="alerts-list">${alerts.map((a) => `
+              <div class="feed-item">
+                <div class="feed-desc">${escapeHtml(a.description)}</div>
+                <div class="feed-time">${escapeHtml(a.timestamp)}</div>
+              </div>`).join('') || `<p class="cell-muted">${this.hasActiveFilter() ? 'No alerts for the selected filters.' : 'No alerts yet.'}</p>`}</div>
+          </div>
         </div>
       </div>
     `;

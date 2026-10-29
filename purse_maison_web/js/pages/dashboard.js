@@ -103,35 +103,197 @@ const DashboardPage = {
     const sumOf = (field) => interactions[field].reduce((a, b) => a + b, 0);
     const interactionTotals = Object.fromEntries(INTERACTION_SERIES.map(([field]) => [field, sumOf(field)]));
 
-    return { itemsSold, activeConsignedItems, thisMonthTotal, growthPercent, periodTotal, periodUnits, avgDisplayDuration, turnoverRate, totalInquiries: DB.inquiryCount, fastMovingCount, slowMovingCount, monthLabels, monthlyTotals, statusCounts, interactions, interactionTotals };
+    return { itemsSold, activeConsignedItems, thisMonthTotal, lastMonthTotal, growthPercent, periodTotal, periodUnits, avgDisplayDuration, soldWithDates: displayDurations.length, turnoverRate, totalInquiries: DB.inquiryCount, fastMovingCount, slowMovingCount, monthLabels, monthlyTotals, statusCounts, interactions, interactionTotals };
   },
 
+    /**
+   * Key Insights: one plain-language line per KPI card, as [label, text]. Rule-based (no AI):
+   * the sentences are fixed templates filled in with the same numbers the cards show.
+   */
   buildInsights(stats) {
+    const peso = (v) => `₱${formatAmount(v)}`;
+    const pct = (v) => `${Math.abs(v).toFixed(1)}%`;
+    const months = this.filterPeriod;
+    const period = this.periodLabel().toLowerCase();
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
     const insights = [];
+
     if (this.filterBrands !== null) {
       const names = this.brandOptions().filter(([k]) => this.filterBrands.includes(k)).map(([, name]) => name);
       const shown = names.length > 3 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} more` : names.join(', ');
-      insights.push(`Showing ${shown || 'no brands'} only (${this.periodLabel().toLowerCase()}).`);
+      insights.push(['Filter', `Showing ${shown || 'no brands'} only.`]);
     }
-    if (stats.thisMonthTotal > 0 || stats.growthPercent !== 0) {
-      const dir = stats.growthPercent >= 0 ? 'up' : 'down';
-      insights.push(`Sales revenue is ${dir} ${Math.abs(stats.growthPercent).toFixed(1)}% compared to last month.`);
+
+    insights.push(['Total Sales', stats.periodTotal > 0
+      ? `${peso(stats.periodTotal)} over the ${period}, about ${peso(stats.periodTotal / months)} a month.`
+      : `No sales in the ${period}.`]);
+    insights.push(['Items Sold', stats.periodUnits > 0
+      ? `${plural(stats.periodUnits, 'item')} sold, about ${Math.round(stats.periodUnits / months)} a month at an average of ${peso(stats.periodTotal / stats.periodUnits)} each.`
+      : 'No items sold in this period.']);
+
+    const perMonth = stats.periodUnits / months;
+    insights.push(['Active Consigned Items', stats.activeConsignedItems > 0
+      ? `${plural(stats.activeConsignedItems, 'item')} still moving through consignment${perMonth > 0 ? `, about ${(stats.activeConsignedItems / perMonth).toFixed(1)} months of stock at the recent selling pace` : ''}.`
+      : 'No items are moving through consignment right now.']);
+
+    if (stats.lastMonthTotal > 0) {
+      insights.push(['Monthly Sales Growth', `This month's sales so far are ${pct(stats.growthPercent)} ${stats.growthPercent >= 0 ? 'above' : 'below'} last month's total of ${peso(stats.lastMonthTotal)}. The month is not over yet, so the figure can still rise.`]);
+    } else {
+      insights.push(['Monthly Sales Growth', 'No sales last month to compare with.']);
     }
+
     if (stats.avgDisplayDuration !== null) {
-      insights.push(`Items typically sell after ${Math.round(stats.avgDisplayDuration)} days in inventory.`);
+      const days = Math.round(stats.avgDisplayDuration);
+      insights.push(['Average Display Duration', `Items sell after ${plural(days, 'day')} on average, ${days <= 60 ? 'within' : 'longer than'} the 60-day consignment period.`]);
+    } else {
+      insights.push(['Average Display Duration', 'Not enough recorded sales to measure yet.']);
     }
-    if (stats.fastMovingCount > 0 || stats.slowMovingCount > 0) {
-      insights.push(`${stats.fastMovingCount} item(s) sold within a month of being added; ${stats.slowMovingCount} took over two months.`);
-    }
-    insights.push(`${(stats.turnoverRate * 100).toFixed(1)}% of current inventory has sold so far.`);
-    if (stats.activeConsignedItems > 0) insights.push(`${stats.activeConsignedItems} consigned item(s) are still active.`);
+
+    insights.push(['Inventory Turnover Rate', `${stats.turnoverRate.toFixed(2)}x means ${(stats.turnoverRate * 100).toFixed(1)}% of the items in inventory have sold.`]);
+
     const t = stats.interactionTotals;
     const buyers = t.buyerPurchased + t.buyerNotProceeded;
     const consignors = t.consigned + t.consignorNotProceeded;
-    if (buyers > 0 && consignors > 0) {
-      insights.push(`${Math.round((t.buyerPurchased / buyers) * 100)}% of buyer inquiries ended in a purchase and ${Math.round((t.consigned / consignors) * 100)}% of consignor inquiries led to a consignment (${this.periodLabel().toLowerCase()}).`);
-    }
+    insights.push(['Total Item Inquiries', `${stats.totalInquiries.toLocaleString('en-PH')} client inquiries recorded in total. In the ${period}, ${buyers} came from buyers and ${consignors} from consignors.`]);
+
+    const known = stats.soldWithDates;
+    insights.push(['Fast Moving Items', known
+      ? `${plural(stats.fastMovingCount, 'item')} (${Math.round((stats.fastMovingCount / known) * 100)}% of recorded sales) sold within 30 days of being added.`
+      : 'No recorded sales to measure yet.']);
+    insights.push(['Slow Moving Items', known
+      ? (stats.slowMovingCount
+        ? `${plural(stats.slowMovingCount, 'item')} (${Math.round((stats.slowMovingCount / known) * 100)}% of recorded sales) took over 60 days to sell. Similar items may need a price review.`
+        : 'No items took over 60 days to sell.')
+      : 'No recorded sales to measure yet.']);
     return insights;
+  },
+
+
+  chartNotes(stats) {
+    const short = (v) => (v >= 1e6 ? `₱${(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `₱${(v / 1e3).toFixed(0)}K` : `₱${formatAmount(v)}`);
+    const pct = (v) => `${Math.abs(v).toFixed(0)}%`;
+    const FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const full = (abbr) => FULL[MONTH_ABBREV.indexOf(abbr)] || abbr;
+    const range = (list) => (list.length > 1 ? `${full(list[0])} to ${full(list[list.length - 1])}` : full(list[0]));
+    const labels = stats.monthLabels;
+    const totals = stats.monthlyTotals;
+    const cur = totals.length - 1;           // the current month (still in progress)
+    const done = totals.slice(0, cur);       // complete months only
+    const doneLabels = labels.slice(0, cur);
+    const today = new Date();
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const progress = `day ${today.getDate()} of ${daysInMonth}`;
+
+    let scope = '';
+    if (this.filterBrands !== null) {
+      const names = this.brandOptions().filter(([k]) => this.filterBrands.includes(k)).map(([, name]) => name);
+      scope = names.length === 1 ? names[0] : names.length === 2 ? `${names[0]} and ${names[1]}` : `the ${names.length} selected brands`;
+    }
+    const notes = {};
+
+    if (!done.some((v) => v > 0)) {
+      notes.overview = `No revenue was recorded${scope ? ` for ${scope}` : ''} in the completed months of this period.`;
+      notes.average = notes.overview;
+    } else {
+      const avgDone = done.reduce((a, b) => a + b, 0) / done.length;
+      const hi = done.indexOf(Math.max(...done));
+      const lo = done.indexOf(Math.min(...done));
+      const span = done.length > 6 ? `over the past ${done.length} completed months` : `from ${range(doneLabels)}`;
+      let text = `${scope ? `For ${scope}, r` : 'R'}evenue averaged ${short(avgDone)} per month ${span}`
+        + (hi !== lo ? `, peaking at ${short(done[hi])} in ${full(doneLabels[hi])} and reaching a low of ${short(done[lo])} in ${full(doneLabels[lo])}.` : '.');
+      if (done.length >= 2) {
+        const split = Math.ceil(done.length / 2);
+        const early = done.slice(0, split);
+        const late = done.slice(split);
+        const avg = (list) => list.reduce((a, b) => a + b, 0) / list.length;
+        if (avg(early) > 0) {
+          const change = ((avg(late) - avg(early)) / avg(early)) * 100;
+          const earlyName = range(doneLabels.slice(0, split));
+          const lateName = range(doneLabels.slice(split));
+          text += Math.abs(change) < 5
+            ? ` Average monthly revenue remained stable between ${earlyName} and ${lateName}.`
+            : (early.length === 1 && late.length === 1
+              ? ` Revenue in ${lateName} was ${pct(change)} ${change > 0 ? 'higher' : 'lower'} than in ${earlyName}.`
+              : ` Average monthly revenue for ${lateName} was ${pct(change)} ${change > 0 ? 'higher' : 'lower'} than for ${earlyName}.`);
+        }
+      }
+      text += ` ${full(labels[cur])} is in progress (${progress}), with ${short(totals[cur])} recorded to date.`;
+      notes.overview = text;
+
+      const average = totals.reduce((a, b) => a + b, 0) / totals.length;
+      const last = done.length - 1;
+      const above = done.filter((v) => v > average).length;
+      const diff = average > 0 ? ((done[last] - average) / average) * 100 : 0;
+      const curDiff = average > 0 ? ((totals[cur] - average) / average) * 100 : 0;
+      const daysLeft = daysInMonth - today.getDate();
+      notes.average = `${scope ? `For ${scope}, m` : 'M'}onthly revenue averaged ${short(average)} over the ${this.periodLabel().toLowerCase()}, including ${full(labels[cur])}'s partial figures. `
+        + `${above} of ${done.length} completed ${done.length === 1 ? 'month' : 'months'} exceeded this average, with ${full(doneLabels[last])} finishing ${pct(diff)} ${diff >= 0 ? 'above' : 'below'} it. `
+        + `${full(labels[cur])} currently stands at ${short(totals[cur])}, ${pct(curDiff)} ${curDiff >= 0 ? 'above' : 'below'} the average, `
+        + `${daysLeft ? `with ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} remaining` : 'on the last day of the month'}.`;
+    }
+
+    const t = stats.interactionTotals;
+    const buyers = t.buyerPurchased + t.buyerNotProceeded;
+    const consignors = t.consigned + t.consignorNotProceeded;
+    if (!buyers && !consignors) {
+      notes.interactions = `No client inquiries were completed in the ${this.periodLabel().toLowerCase()}.`;
+    } else {
+      const share = (part, whole) => Math.round((part / whole) * 100);
+      const portion = (p) => (p >= 90 ? 'nearly all' : p >= 70 ? 'most' : p >= 56 ? 'more than half'
+        : p > 50 ? 'just over half' : p === 50 ? 'half' : p >= 25 ? 'fewer than half' : 'a small share');
+      const group = (p, noun) => (['nearly all', 'most'].includes(portion(p)) ? `${portion(p)} ${noun}` : `${portion(p)} of ${noun}`);
+      const total = buyers + consignors;
+      const mix = [consignors ? `${consignors} from consignors` : null, buyers ? `${buyers} from buyers` : null].filter(Boolean).join(' and ');
+      let text = `A total of ${total} ${total === 1 ? 'inquiry was' : 'inquiries were'} completed in the ${this.periodLabel().toLowerCase()}: ${mix}.`;
+
+      const outcomes = [];
+      if (consignors) {
+        const p = share(t.consigned, consignors);
+        outcomes.push(`${group(p, 'consignors')} proceeded with a consignment (${p}%)`);
+      }
+      if (buyers) {
+        const p = share(t.buyerPurchased, buyers);
+        outcomes.push(`${group(p, 'buyers')} made a purchase (${p}%)`);
+      }
+      const sentence = outcomes.join(', while ');
+      text += ` ${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`;
+
+      const perMonth = labels.map((_, i) => INTERACTION_SERIES.reduce((sum, [field]) => sum + stats.interactions[field][i], 0));
+      const doneMonths = perMonth.slice(0, cur);
+      if (doneMonths.some((v) => v > 0)) {
+        const top = doneMonths.indexOf(Math.max(...doneMonths));
+        text += ` ${full(labels[top])} recorded the highest volume with ${perMonth[top]} inquiries.`;
+      }
+
+      const months = lastNMonths(this.filterPeriod);
+      const open = (DB.customerInteractions || [])
+        .filter((r) => months.some((m) => r.date.getFullYear() === m.year && r.date.getMonth() + 1 === m.month))
+        .reduce((sum, r) => sum + (r.inProgress || 0), 0);
+      if (open) text += ` ${open} ${open === 1 ? 'inquiry remains' : 'inquiries remain'} open.`;
+      if (this.filterBrands !== null) text += ' Inquiry figures include all brands.';
+      notes.interactions = text;
+    }
+
+    const entries = Object.entries(stats.statusCounts).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    const total = entries.reduce((sum, [, v]) => sum + v, 0);
+    if (!total) {
+      notes.inventory = `No inventory items${scope ? ` for ${scope}` : ''} to report yet.`;
+    } else {
+      const verb = {
+        Sold: ['has been sold', 'have been sold'], Available: ['is available', 'are available'],
+        Reserved: ['is reserved', 'are reserved'], Rejected: ['was rejected', 'were rejected'],
+      };
+      const list = entries.map(([k, v]) => `${v} ${(verb[k] || [k, k])[v === 1 ? 0 : 1]} (${Math.round((v / total) * 100)}%)`);
+      const joined = list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list[0];
+      let text = `${scope ? `For ${scope}, o` : 'O'}f the ${total} ${total === 1 ? 'item' : 'items'} listed, ${joined}.`;
+      const available = stats.statusCounts.Available || 0;
+      const perMonth = stats.periodUnits / this.filterPeriod;
+      if (available && perMonth > 0) {
+        text += ` At the recent pace of about ${Math.round(perMonth)} sales per month, available stock would last roughly ${(available / perMonth).toFixed(1)} months.`;
+      }
+      notes.inventory = text;
+    }
+    return notes;
   },
 
   render() {
@@ -143,6 +305,7 @@ const DashboardPage = {
     const filtered = this.filterBrands !== null || this.filterPeriod !== 6;
     const stats = this.computeStats();
     const insights = this.buildInsights(stats);
+    const notes = this.chartNotes(stats);
     const user = Session.currentUser;
     const roleConfig = ROLES[user.role] || ROLES.salesAssociate;
 
@@ -187,7 +350,8 @@ const DashboardPage = {
         <div class="chart-card">
           <div class="chart-card-title"><span>Sales Overview</span><span class="period-chip">${this.filterPeriod} Months</span></div>
           <div class="chart-canvas-wrap"><canvas id="chart-sales-overview"></canvas></div>
-        </div>
+          <p class="chart-insight">${escapeHtml(notes.overview)}</p>
+          </div>
         <div class="chart-card">
           <div class="chart-card-title">
             <span>Customer Interactions</span>
@@ -197,7 +361,8 @@ const DashboardPage = {
             ${INTERACTION_SERIES.map(([field, label, color]) => `<div class="legend-item"><span class="legend-dot" style="background:${color}"></span>${escapeHtml(label)} (${stats.interactionTotals[field]})</div>`).join('')}
           </div>
           <div class="chart-canvas-wrap"><canvas id="chart-customer-interactions"></canvas></div>
-        </div>
+          <p class="chart-insight">${escapeHtml(notes.interactions)}</p>
+          </div>
       </div>
 
       <div class="stat-grid cols-5" style="margin-bottom:20px;">
@@ -208,7 +373,7 @@ const DashboardPage = {
         <div class="stat-card"><div class="stat-title">Slow Moving Items</div><div class="stat-value-row"><span class="stat-value">${stats.slowMovingCount}</span></div></div>
       </div>
 
-      <div class="section-grid">
+      <div class="section-grid dash-bottom-row">
         <div class="chart-card col-narrow">
           <div class="chart-card-title">
             <span>Inventory Performance</span>
@@ -218,14 +383,18 @@ const DashboardPage = {
             </div>
           </div>
           <div class="chart-canvas-wrap short"><canvas id="chart-inventory-performance"></canvas></div>
-        </div>
+          <p class="chart-insight">${escapeHtml(notes.inventory)}</p>
+          </div>
         <div class="chart-card col-wide">
           <div class="chart-card-title"><span>Actual vs ${this.filterPeriod}-Month Average</span><span class="period-chip">${this.filterPeriod} Months</span></div>
           <div class="chart-canvas-wrap short"><canvas id="chart-actual-vs-average"></canvas></div>
-        </div>
-        <div class="key-insights col-narrow">
+          <p class="chart-insight">${escapeHtml(notes.average)}</p>
+          </div>
+        <div class="key-insights col-narrow key-insights-scroll">
           <div class="key-insights-title">Key Insights</div>
-          <ul>${insights.map((i) => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
+          <div class="key-insights-body">
+            <ul>${insights.map(([label, text]) => `<li><span><strong>${escapeHtml(label)}:</strong> ${escapeHtml(text)}</span></li>`).join('')}</ul>
+          </div>
         </div>
       </div>
     `;
