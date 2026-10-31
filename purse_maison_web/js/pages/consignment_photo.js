@@ -52,7 +52,8 @@ Object.assign(ConsignmentFlow, {
     };
     const n = this.listingPhotoCount(i);
     return `
-      <div class="photo-card-grid">
+      ${editable ? this.renderBulkPhotoUpload('listing') : ''}
+      <div class="photo-tile-grid"${editable ? ' data-drop-key="listing"' : ''}>
         ${Object.entries(LISTING_PHOTO_TYPES).map(([t, l]) => slot(t, l, false)).join('')}
         ${Object.entries(OPTIONAL_LISTING_PHOTOS).map(([t, l]) => slot(t, l, true)).join('')}
       </div>
@@ -135,7 +136,6 @@ Object.assign(ConsignmentFlow, {
             [n === 7, `Required shots (${n}/7)`],
           ])}
           ${canShoot ? `<button class="btn-confirm" id="photo-submit" style="width:100%; margin-top:12px;${n === 7 ? '' : ' opacity:.5; cursor:not-allowed;'}" ${n === 7 ? '' : 'disabled'}>Submit to Design</button>` : ''}
-          <small class="cell-muted">Design edits the shots, picks the cover photo and approves the set.</small>
           <button class="btn-secondary" id="photo-history" style="width:100%; margin-top:14px;">View Activity Log</button>
         </div>
       </div>`;
@@ -176,6 +176,12 @@ Object.assign(ConsignmentFlow, {
         await this.save(null, `${label} shot uploaded.`, () => this.uploadListingPhoto(i, type, file));
       });
     });
+    
+    const lp = i.listingPhotos || {};
+    const listingTypes = { ...LISTING_PHOTO_TYPES, ...OPTIONAL_LISTING_PHOTOS };
+    const filled = {};
+    Object.keys(listingTypes).forEach((t) => { filled[t] = !!(lp[t] || (t === 'side_left' && lp.side_right)); });
+    this.bindBulkPhotoUpload('listing', listingTypes, filled, (type, file) => this.uploadListingPhoto(i, type, file));
       },
   });
 

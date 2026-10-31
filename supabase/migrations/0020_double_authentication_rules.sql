@@ -69,17 +69,35 @@ begin
     end if;
   end if;
 
-  -- A final result typed in directly is only for settling a disagreement, by the owner
+  -- A final result set by hand: either completing with the 1st check only (the 2nd authenticator is optional),
+  -- or the owner settling a disagreement between two checks
   if new.final_result is distinct from old.final_result then
     if old.final_result is not null then
       raise exception 'The final result is already recorded and cannot be changed';
     end if;
-    if not (from_editor or is_owner) then
-      raise exception 'Only the owner can settle a disagreement between authenticators';
-    end if;
-    if new.primary_result is null or new.secondary_result is null
-       or new.primary_result = new.secondary_result then
-      raise exception 'A final result can only be set by hand when both authenticators disagree';
+
+    if new.secondary_result is null then
+      -- Single check
+      if new.primary_result is null then
+        raise exception 'Record the 1st result before completing the check';
+      end if;
+      if new.secondary_authenticator_id is not null then
+        raise exception 'A 2nd authenticator is assigned: wait for their result, or unassign them to finish with one check';
+      end if;
+      if new.final_result <> new.primary_result then
+        raise exception 'With one check, the final result must match the 1st result';
+      end if;
+      if not (from_editor or is_owner or auth.uid() = new.primary_authenticator_id) then
+        raise exception 'Only the 1st authenticator or the owner can complete the check with one result';
+      end if;
+    else
+      -- Two checks that disagree
+      if not (from_editor or is_owner) then
+        raise exception 'Only the owner can settle a disagreement between authenticators';
+      end if;
+      if new.primary_result is null or new.primary_result = new.secondary_result then
+        raise exception 'A final result can only be set by hand when both authenticators disagree';
+      end if;
     end if;
   end if;
 

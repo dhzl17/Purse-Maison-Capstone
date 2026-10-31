@@ -188,7 +188,7 @@ const HELP_ARTICLES = [
     keywords: 'authenticator authentication certificate photographer photos design listing cover photo pricing markup manager approve reject publish',
     intro: 'Each team has its own page in Consignment Management. Open your page from the sidebar and select an item to work on it.',
     steps: [
-      '**Authentication Service**: click **Take This Check**, then **Record** your result. Two different authenticators must each check the item. If both say Authentic, it goes to Photography. If both say Fake, it closes. If they disagree, the owner records the final decision.',
+      '**Authentication Service**: click **Take This Check**, then **Record** your result. A 2nd authenticator is optional. With one check, upload the certificate and click **Complete with 1st Result**. With two checks, if both say Authentic it goes to Photography, if both say Fake it closes, and if they disagree the owner records the final decision.',
       '**Photography Tasks**: click **Take This Item**, upload the 7 required shots (front, back, side, interior, hardware, serial number and accessories; lifestyle is optional), then click **Submit to Design**.',
       '**Design & Listing**: upload the edited photos, click **Set as cover** on one photo, then click **Approve Photos → Manager** or **Return to Photographer**. At Listing Creation, complete the listing, click **Save Draft**, then **Submit for Publishing**.',
       '**Manager Approvals**: review the item, then click **Approve → Pricing**, **Return for Revision** or **Reject Item**. Submitted listings are made live with **Publish Item**.',

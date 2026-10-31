@@ -62,7 +62,7 @@ Object.assign(ConsignmentFlow, {
   slotCell(a, slot) {
     const who = a[`${slot}_authenticator_id`];
     const res = a[`${slot}_result`];
-    if (!who) return '<span class="cell-muted">Unassigned</span>';
+    if (!who) return `<span class="cell-muted">${slot === 'secondary' ? 'Optional' : 'Unassigned'}</span>`;
     const shown = res ? (this.canSeeResult(a, slot) ? this.resultBadge(res) : badge('Recorded', 'info')) : '<span class="cell-muted">Pending</span>';
     return `<div style="font-size:12px; font-weight:600;">${escapeHtml(this.staffName(who))}</div>${shown}`;
   },
@@ -149,7 +149,7 @@ Object.assign(ConsignmentFlow, {
           </div>
 
           ${this.renderSlot(i, 'primary', '1st Authenticator')}
-          ${this.renderSlot(i, 'secondary', '2nd Authenticator')}
+          ${this.renderSlot(i, 'secondary', '2nd Authenticator <span class="cell-muted" style="font-weight:500;">(optional)</span>')}
 
           <div style="margin-top:16px; padding-top:12px; border-top:1px solid #E2E8F0;">
             <div class="card-title" style="margin-bottom:8px;">Outcome</div>
@@ -165,15 +165,32 @@ Object.assign(ConsignmentFlow, {
                 </div>
                 <button class="btn-confirm" id="auth-settle" style="width:100%;">Record Final Decision</button>` :
                 '<div class="cell-muted" style="font-size:12px;">The owner (Super Admin) decides the final result.</div>'}` :
-              this.checklistHtml([
-                [!!a.primary_result, '1st result recorded'],
-                [!!a.secondary_result, '2nd result recorded'],
-                [!!a.certificate_url, 'Certificate uploaded'],
-              ]) + '<div class="cell-muted" style="font-size:12px; margin-top:6px;">When both results agree, the item moves on automatically: Authentic → Photography, Fake → closed.</div>'}
+                this.renderOutcome(i)}
           </div>
           <button class="btn-secondary" id="auth-history" style="width:100%; margin-top:14px;">View Activity Log</button>
         </div>
       </div>`;
+  },
+
+  renderOutcome(i) {
+    const a = i.auth;
+    const second = !!a.secondary_authenticator_id;
+    const checks = [[!!a.primary_result, '1st result recorded']];
+    if (second) checks.push([!!a.secondary_result, '2nd result recorded']);
+    checks.push([!!a.certificate_url, 'Certificate uploaded']);
+
+    let action = '';
+    if (!a.final_result && a.primary_result && !second && (this.isOwner() || a.primary_authenticator_id === this.myId())) {
+      action = a.certificate_url
+        ? '<button class="btn-confirm" id="auth-complete-single" style="width:100%; margin-top:10px;">Confirm</button>'
+        : '<div class="cell-muted" style="font-size:12px; margin-top:8px;">Upload the certificate to complete the check.</div>';
+    } else if (!a.final_result && a.primary_result && second && !a.secondary_result) {
+      action = '<div class="cell-muted" style="font-size:12px; margin-top:8px;">Waiting for the 2nd result. To finish with one check, unassign the 2nd authenticator.</div>';
+    }
+    const note = second
+      ? '<div class="cell-muted" style="font-size:12px; margin-top:6px;">When both results agree, the item moves on automatically: Authentic → Photography, Fake → closed.</div>'
+      : '';
+    return `${this.checklistHtml(checks)}${action}${note}`;
   },
 
   renderSlot(i, slot, title) {
@@ -260,7 +277,8 @@ Object.assign(ConsignmentFlow, {
         if (st === 'photography') setTimeout(() => showToast(`Both checks agree: ${i.code} is authentic and moved to Photography.`), 50);
         if (st === 'closed_fake') setTimeout(() => showToast(`Both checks agree: ${i.code} is fake and has been closed. Records are kept.`), 50);
       });
-      if (v === 'fake') this.confirm('Record as Fake?', `If the other check also says Fake, ${i.code} will be closed as a fake item. This cannot be undone.`, 'Record Fake', go);
+      const otherAssigned = !!a[`${slot === 'primary' ? 'secondary' : 'primary'}_authenticator_id`];
+      if (v === 'fake' && otherAssigned) this.confirm('Record as Fake?', `If the other check also says Fake, ${i.code} will be closed as a fake item. This cannot be undone.`, 'Record Fake', go);
       else go();
     }));
 
@@ -280,6 +298,13 @@ Object.assign(ConsignmentFlow, {
       const url = !error && data && data[0] && data[0].signedUrl;
       if (url) window.open(url, '_blank', 'noopener');
       else showToast('Could not open the certificate.');
+    });
+
+    on('auth-complete-single', (btn) => {
+      const v = a.primary_result;
+      this.confirm('Confirm Authentication',
+        `Complete the authentication check for ${i.code}? This cannot be undone.`,
+        'Confirm Results', () => this.save(btn, `Check completed: ${i.code} is ${AUTH_RESULTS[v]}.`, () => this.updateAuth(a.id, { final_result: v })));
     });
 
     on('auth-settle', (btn) => {

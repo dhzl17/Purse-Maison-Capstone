@@ -65,6 +65,20 @@ const INTAKE_PHOTO_TYPES = {
   inside: 'Inside', serial_number: 'Serial number', date_code: 'Date code', hardware: 'Hardware', accessories: 'Accessories',
 };
 const OPTIONAL_INTAKE_PHOTOS = { microchip: 'Microchip' };
+const PHOTO_NAME_HINTS = [
+  ['serial_number', ['serial']],
+  ['date_code', ['datecode', 'date']],
+  ['microchip', ['microchip', 'chip']],
+  ['side_right', ['right']],
+  ['side_left', ['left', 'side', 'right']],
+  ['underside', ['bottom', 'underside', 'base']],
+  ['inside', ['inside', 'interior']],
+  ['accessories', ['accessories', 'accessory', 'dustbag', 'box']],
+  ['hardware', ['hardware', 'clasp', 'zipper']],
+  ['lifestyle', ['lifestyle', 'styled']],
+  ['front', ['front']],
+  ['back', ['back', 'rear']],
+];
 const ACCESSORY_OPTIONS = ['Dust bag', 'Box', 'Lock', 'Keys', 'Strap', 'Receipt'];
 const ITEM_CATEGORIES = ['Handbag', 'Shoulder Bag', 'Tote', 'Crossbody', 'Backpack', 'Clutch', 'Small Leather Goods', 'Wallet', 'Shoes', 'Belt', 'Accessory'];
 const FEE_LABELS = {
@@ -74,6 +88,7 @@ const FEE_LABELS = {
   'legitgrail/chanel_hermes_premium': 'LegitGrail — Chanel & Hermès premium',
 };
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_SIGNATURE_BYTES = 2 * 1024 * 1024;
 
 const ConsignmentFlow = {
   selected: { preintake: null, intake: null },
@@ -184,6 +199,171 @@ const ConsignmentFlow = {
     if (error) throw error;
   },
 
+  /** Signature images: PNG, JPG or JPEG only, up to 2 MB (the bucket enforces the same limits). */
+  checkSignatureFile(file) {
+    if (!file) return 'Choose the signature image first.';
+    if (!['image/png', 'image/jpeg'].includes(file.type) || !/\.(png|jpe?g)$/i.test(file.name)) {
+      return 'Only PNG, JPG or JPEG images can be uploaded.';
+    }
+    if (file.size > MAX_SIGNATURE_BYTES) return 'The signature image is larger than 2 MB.';
+    return null;
+  },
+
+  /** Uploads the signature under <consignor id>/<item id>/ and links a new agreement to this item. */
+  async saveUploadedSignature(item, file) {
+    const problem = this.checkSignatureFile(file);
+    if (problem) throw new Error(problem);
+    const path = `${item.consignor.id}/${item.id}/signature-${Date.now()}.${this.extOf(file)}`;
+    const up = await sbClient.storage.from('signatures').upload(path, file, { contentType: file.type });
+    if (up.error) throw up.error;
+    const { data, error } = await sbClient.from('consignment_agreements').insert({
+      consignor_id: item.consignor.id, item_id: item.id, signature_path: path, signature_method: 'uploaded',
+    }).select('id').single();
+    if (error) throw error;
+    await this.updateItem(item.id, { agreement_id: data.id });
+  },
+
+  /** The upload box: instructions, drop zone, preview with Replace / Remove, consent, save. */
+  renderSignatureUpload() {
+    return `
+      <div class="sig-upload">
+        <input type="file" id="sig-file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" hidden>
+        <div class="sig-dropzone" id="sig-dropzone" tabindex="0" role="button" aria-label="Upload e-signature image">
+          <i class="fa-solid fa-signature sig-dropzone-icon"></i>
+          <div class="sig-dropzone-title">Upload E-Signature</div>
+          <div class="sig-dropzone-hint">Have the consignor sign on plain white paper in dark ink, then upload a clear photo or scan.<br>
+            Click to choose or drag the image here · PNG, JPG or JPEG · up to 2 MB</div>
+          <span class="btn-secondary sig-small-btn">Choose Image</span>
+        </div>
+        <div class="sig-preview" id="sig-preview" hidden>
+          <img id="sig-preview-img" alt="Signature preview">
+          <div class="sig-preview-meta">
+            <span id="sig-preview-name"></span>
+            <div class="sig-preview-actions">
+              <button type="button" class="btn-secondary sig-small-btn" id="sig-replace">Replace</button>
+              <button type="button" class="btn-secondary btn-danger sig-small-btn" id="sig-remove">Remove</button>
+            </div>
+          </div>
+        </div>
+        <label class="sig-consent"><input type="checkbox" id="sig-consent">
+          <span>The consignor has read the key terms above and confirms this is their own signature.</span></label>
+        <button class="btn-secondary" id="int-sign" style="margin-top:10px;">Save Signed Agreement</button>
+      </div>`;
+  },
+
+  /** Signed view: the saved signature (click to enlarge), when it was signed, and Replace while at the door. */
+  renderSignedAgreement(i, canReplace) {
+    const path = i.agreementSignaturePath;
+    return `
+      <div class="sig-signed">
+        <div class="sig-signed-thumb"${path ? ` data-photo-preview="1" data-photo-bucket="signatures" data-photo-path="${escapeHtml(path)}" title="Click to enlarge"` : ''}>
+          ${path ? `<img data-photo-bucket="signatures" data-photo-path="${escapeHtml(path)}" alt="Consignor signature">`
+            : '<img id="sig-legacy-img" alt="Consignor signature" hidden><span class="cell-muted" id="sig-legacy-note">Signature on file</span>'}
+        </div>
+        <div>
+          <div style="font-size:12.5px; color:var(--green); font-weight:600;">✓ Signed on ${escapeHtml(this.fmtDate(i.agreementSignedAt))}</div>
+          <div class="cell-muted" style="font-size:11.5px; margin-top:2px;">${path ? 'Uploaded e-signature' : 'Drawn on the signature pad'}</div>
+          ${canReplace ? '<button type="button" class="btn-secondary sig-small-btn" id="int-sign-replace-toggle" style="margin-top:8px;">Replace Signature</button>' : ''}
+        </div>
+      </div>
+      ${canReplace ? `<div id="int-sign-replace" hidden>${this.renderSignatureUpload()}</div>` : ''}`;
+  },
+
+  bindSignatureUpload(item) {
+    // Saved signature: thumbnail, click to enlarge (intake photos already bind previews while at the door)
+    const signed = document.querySelector('.sig-signed');
+    if (signed && item.stage !== 'dropoff_pickup_courier') this.bindPhotoPreviews(signed);
+    this.fillPhotos('signatures');
+
+    // Agreements signed on the old pad keep their drawn image in signature_data
+    const legacyImg = document.getElementById('sig-legacy-img');
+    if (legacyImg && item.agreementId) {
+      sbClient.from('consignment_agreements').select('signature_data').eq('id', item.agreementId).maybeSingle()
+        .then(({ data }) => {
+          const src = data && data.signature_data;
+          if (!src || !/^data:image\/(png|jpeg);base64,/.test(src) || !legacyImg.isConnected) return;
+          legacyImg.src = src;
+          legacyImg.hidden = false;
+          const note = document.getElementById('sig-legacy-note');
+          if (note) note.remove();
+        });
+    }
+
+    const toggle = document.getElementById('int-sign-replace-toggle');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        const wrap = document.getElementById('int-sign-replace');
+        wrap.hidden = !wrap.hidden;
+        toggle.textContent = wrap.hidden ? 'Replace Signature' : 'Cancel Replace';
+      });
+    }
+
+    const input = document.getElementById('sig-file');
+    if (!input) return;
+    const zone = document.getElementById('sig-dropzone');
+    const preview = document.getElementById('sig-preview');
+    const img = document.getElementById('sig-preview-img');
+    let file = null;
+    let objectUrl = null;
+
+    const showError = (message) => Validate.show(null, [[file ? preview : zone, message]]);
+    const reset = () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      file = null;
+      objectUrl = null;
+      input.value = '';
+      img.removeAttribute('src');
+      preview.hidden = true;
+      zone.hidden = false;
+    };
+    const pick = (chosen) => {
+      if (!chosen) return;
+      input.value = '';
+      const problem = this.checkSignatureFile(chosen);
+      if (problem) { showError(problem); return; }
+      // Make sure the file really opens as an image before showing it
+      const url = URL.createObjectURL(chosen);
+      const probe = new Image();
+      probe.onload = () => {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        file = chosen;
+        objectUrl = url;
+        img.src = url;
+        document.getElementById('sig-preview-name').textContent = `${chosen.name} · ${Math.max(1, Math.round(chosen.size / 1024))} KB`;
+        Validate.unmark(zone);
+        Validate.unmark(preview);
+        zone.hidden = true;
+        preview.hidden = false;
+      };
+      probe.onerror = () => {
+        URL.revokeObjectURL(url);
+        showError('This file could not be opened as an image. Try another photo or scan.');
+      };
+      probe.src = url;
+    };
+
+    zone.addEventListener('click', () => input.click());
+    zone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+    });
+    input.addEventListener('change', () => pick(input.files && input.files[0]));
+    ['dragenter', 'dragover'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add('is-dragover'); }));
+    ['dragleave', 'drop'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove('is-dragover'); }));
+    zone.addEventListener('drop', (e) => pick(e.dataTransfer.files && e.dataTransfer.files[0]));
+    document.getElementById('sig-replace').addEventListener('click', () => input.click());
+    document.getElementById('sig-remove').addEventListener('click', reset);
+
+    document.getElementById('int-sign').addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      const consent = document.getElementById('sig-consent');
+      if (Validate.show(null, [
+        [zone, file ? null : "Upload the consignor's signature image first."],
+        [consent, consent.checked ? null : 'Confirm the consignor has agreed to the key terms.'],
+      ])) return;
+      this.save(btn, 'Agreement signed and attached.', () => this.saveUploadedSignature(item, file));
+    });
+  },
+
   async fillPhotos(bucket) {
     const imgs = Array.from(document.querySelectorAll(`img[data-photo-bucket="${bucket}"]`));
     const needed = imgs.map((img) => img.dataset.photoPath).filter((p) => p && !this.photoUrls[p]);
@@ -198,22 +378,27 @@ const ConsignmentFlow = {
   },
 
 
-  photoCardHtml(bucket, type, path, label, optional, editable, uploadAttr) {
-    return `
-      <div class="photo-card">
-        <div class="photo-card-thumb"${path ? ` data-photo-preview="1" data-photo-bucket="${bucket}" data-photo-path="${escapeHtml(path)}" title="Click to preview"` : ''}>
-          ${path ? `<img data-photo-bucket="${bucket}" data-photo-path="${escapeHtml(path)}" alt="${escapeHtml(label)}">` : '<i class="fa-regular fa-image photo-card-thumb-icon"></i>'}
-        </div>
-        <div class="photo-card-info">
-          <div class="photo-card-label">${escapeHtml(label)}${optional ? ' <span class="cell-muted">(optional)</span>' : ''}</div>
-          <div class="photo-card-status ${path ? 'is-uploaded' : (optional ? 'is-optional' : 'is-missing')}">${path ? 'Uploaded' : 'Missing'}</div>
-        </div>
-        ${editable ? `
-          <label class="photo-card-action">
-            <span class="photo-card-action-text">${path ? 'Replace' : 'Upload'}</span>
-            <input type="file" accept="image/jpeg,image/png,image/webp" ${uploadAttr}="${type}" style="display:none;">
-          </label>` : ''}
-      </div>`;
+    photoCardHtml(bucket, type, path, label, optional, editable, uploadAttr) {
+      const input = `<input type="file" accept="image/jpeg,image/png,image/webp" ${uploadAttr}="${type}" hidden>`;
+      let body;
+      if (path) {
+        body = `
+          <div class="photo-tile-img" data-photo-preview="1" data-photo-bucket="${bucket}" data-photo-path="${escapeHtml(path)}" title="Click to preview">
+            <img data-photo-bucket="${bucket}" data-photo-path="${escapeHtml(path)}" alt="${escapeHtml(label)}">
+          </div>
+          ${editable ? `<label class="photo-tile-replace" title="Replace ${escapeHtml(label)}">
+            <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i><span class="photo-card-action-text">Replace</span>${input}</label>` : ''}`;
+      } else if (editable) {
+        body = `<label class="photo-tile-empty is-clickable" title="Upload ${escapeHtml(label)}">
+            <i class="fa-regular fa-image" aria-hidden="true"></i><span class="photo-card-action-text">Upload</span>${input}</label>`;
+      } else {
+        body = '<div class="photo-tile-empty"><i class="fa-regular fa-image" aria-hidden="true"></i><span>Missing</span></div>';
+      }
+      return `
+        <div class="photo-tile ${path ? 'is-uploaded' : (optional ? 'is-optional' : 'is-missing')}"${editable ? ` data-drop-slot="${type}"` : ''}>
+          <div class="photo-tile-box">${body}</div>
+          <div class="photo-tile-caption">${escapeHtml(label)}${optional ? ' <span class="cell-muted">(optional)</span>' : ''}</div>
+        </div>`;
   },
 
 
@@ -239,7 +424,8 @@ const ConsignmentFlow = {
     const slot = (type, label, optional) =>
       this.photoCardHtml('intake-photos', type, item.photos[type], label, optional, editable, 'data-photo-upload');
     return `
-      <div class="photo-card-grid">
+      ${editable ? this.renderBulkPhotoUpload('intake') : ''}
+      <div class="photo-tile-grid"${editable ? ' data-drop-key="intake"' : ''}>
         ${Object.entries(INTAKE_PHOTO_TYPES).map(([t, l]) => slot(t, l, false)).join('')}
         ${Object.entries(OPTIONAL_INTAKE_PHOTOS).map(([t, l]) => slot(t, l, true)).join('')}
       </div>
@@ -260,6 +446,128 @@ const ConsignmentFlow = {
       });
     });
     this.fillPhotos('intake-photos');
+    this.bindBulkPhotoUpload('intake', { ...INTAKE_PHOTO_TYPES, ...OPTIONAL_INTAKE_PHOTOS }, item.photos,
+      (type, file) => this.uploadIntakePhoto(item, type, file));
+  },
+
+  /** Upload box shown above an editable photo grid: one Upload button, or drag & drop several photos. */
+  renderBulkPhotoUpload(key) {
+    return `
+      <div class="bulk-upload" id="bulk-${key}">
+        <input type="file" class="bulk-file" accept="image/jpeg,image/png,image/webp" multiple hidden>
+        <div class="bulk-dropzone" tabindex="0" role="button" aria-label="Upload photos">
+          <span class="btn-secondary bulk-upload-btn"><i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i> Upload</span>
+          <div class="bulk-dropzone-hint">Choose photos or drag &amp; drop them here.</div>
+          <div class="bulk-dropzone-sub">JPG, JPEG, PNG and WEBP. Max 10 MB each. Photos fill the empty tiles in order.</div>
+        </div>
+      </div>`;
+  },
+
+  /**
+   * types: { photo_type: label } for this grid. filled: which types already have a photo.
+   * uploadOne(type, file): the existing single-photo upload (intake or listing), reused for each file.
+   */
+  bindBulkPhotoUpload(key, types, filled, uploadOne) {
+    const root = document.getElementById(`bulk-${key}`);
+    if (!root) return;
+    const input = root.querySelector('.bulk-file');
+    const zone = root.querySelector('.bulk-dropzone');
+    const hint = root.querySelector('.bulk-dropzone-hint');
+    const grid = document.querySelector(`[data-drop-key="${key}"]`);
+    const order = Object.keys(types);
+    let busy = false;
+
+    const isImage = (file) => new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const probe = new Image();
+      probe.onload = () => { URL.revokeObjectURL(url); resolve(true); };
+      probe.onerror = () => { URL.revokeObjectURL(url); resolve(false); };
+      probe.src = url;
+    });
+
+    // slot: a tile the files were dropped on (that tile only). Without it, photos go by file name, then to empty tiles.
+    const start = async (fileList, slot) => {
+      if (busy || !fileList || !fileList.length) return;
+      busy = true;
+      const files = Array.from(fileList).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+      const skipped = [];
+      const ok = [];
+      for (const f of files) {
+        const problem = this.checkFile(f, false);
+        if (problem) skipped.push(`${f.name}: ${problem}`);
+        else if (!(await isImage(f))) skipped.push(`${f.name}: this file could not be opened as an image.`);
+        else ok.push(f);
+      }
+
+      const jobs = [];
+      if (slot) {
+        if (ok.length) jobs.push({ type: slot, file: ok[0] });
+        ok.slice(1).forEach((f) => skipped.push(`${f.name}: drop one photo at a time on a tile.`));
+      } else {
+        const taken = new Set();
+        const rest = [];
+        ok.forEach((f) => {
+          const words = ` ${f.name.toLowerCase().replace(/\.[a-z0-9]+$/, '').replace(/[^a-z0-9]+/g, ' ')} `;
+          const hit = PHOTO_NAME_HINTS.find(([t, kws]) => types[t] && !taken.has(t) && kws.some((k) => words.includes(` ${k} `)));
+          if (hit) { taken.add(hit[0]); jobs.push({ type: hit[0], file: f }); } else rest.push(f);
+        });
+        rest.forEach((f) => {
+          const t = order.find((x) => !filled[x] && !taken.has(x));
+          if (t) { taken.add(t); jobs.push({ type: t, file: f }); }
+          else skipped.push(`${f.name}: no empty tile left. Drop it on the tile you want to replace.`);
+        });
+        jobs.sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
+      }
+
+      Validate.show(null, [[zone, skipped.length ? skipped : null]]);
+      if (!jobs.length) { busy = false; return; }
+
+      zone.classList.add('is-busy');
+      const failed = [];
+      for (let n = 0; n < jobs.length; n += 1) {
+        const tile = grid && grid.querySelector(`[data-drop-slot="${jobs[n].type}"]`);
+        if (tile) tile.classList.add('is-uploading');
+        hint.textContent = `Uploading ${n + 1} of ${jobs.length}…`;
+        try {
+          await uploadOne(jobs[n].type, jobs[n].file);
+        } catch (err) {
+          console.error(err);
+          failed.push(`${types[jobs[n].type]} (${this.friendly(err)})`);
+        }
+      }
+      const done = jobs.length - failed.length;
+      showToast(failed.length
+        ? `${done} of ${jobs.length} photos uploaded. Not uploaded: ${failed.join(', ')}.`
+        : `${done} photo${done === 1 ? '' : 's'} uploaded.`);
+      try { await DataStore.loadPipeline(); } catch (err) { console.error(err); }
+      Router.rerender();
+      // Keep the list of skipped files visible after the page refreshes
+      const newZone = document.querySelector(`#bulk-${key} .bulk-dropzone`);
+      if (newZone && skipped.length) Validate.show(null, [[newZone, skipped]]);
+    };
+
+    const dropTarget = (el, slot) => {
+      ['dragenter', 'dragover'].forEach((ev) => el.addEventListener(ev, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!busy) el.classList.add('is-dragover');
+      }));
+      el.addEventListener('dragleave', () => el.classList.remove('is-dragover'));
+      el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        el.classList.remove('is-dragover');
+        start(e.dataTransfer.files, slot);
+      });
+    };
+
+    dropTarget(zone, null);
+    if (grid) grid.querySelectorAll('[data-drop-slot]').forEach((tile) => dropTarget(tile, tile.dataset.dropSlot));
+    zone.addEventListener('click', () => { if (!busy) input.click(); });
+    zone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!busy) input.click(); }
+    });
+    input.addEventListener('change', () => { const picked = input.files; start(picked, null); input.value = ''; });
   },
 
   confirm(title, message, okLabel, onConfirm) {
@@ -845,18 +1153,13 @@ const ConsignmentFlow = {
           ${this.renderPhotoGrid(i, editable && atDoor)}
 
           <h3 style="font-size:14px; margin:18px 0 8px;">4. Consignment Agreement & E-Signature</h3>
-          ${i.agreementId ? `<div style="font-size:12.5px; color:var(--green);">✓ Signed on ${escapeHtml(this.fmtDate(i.agreementSignedAt))}</div>` : `
+          ${i.agreementId ? this.renderSignedAgreement(i, editable && atDoor) : `
           <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px; font-size:12px; color:#475569; margin-bottom:8px;">
             <strong>Key terms</strong> (official policy text to follow from the client): 60-day consignment from the publish date, extendable by mutual agreement ·
             ₱2,500 pull-out fee if withdrawn within 60 days of posting · payout 1–14 banking days after the sale, less applicable fees ·
             layaway at 1% per month up to 3 months for items ₱200,000 and above.
           </div>
-          ${editable ? `
-          <div class="signature-container" style="position:relative; border:1px dashed #ccc; background:#fafafa; border-radius:8px;">
-            <canvas id="signature-pad" width="600" height="160" style="touch-action:none; cursor:crosshair; width:100%; height:160px;"></canvas>
-            <button type="button" id="clear-signature-btn" style="position:absolute; top:10px; right:10px; padding:4px 10px; font-size:12px;">Clear</button>
-          </div>
-          <button class="btn-secondary" id="int-sign" style="margin-top:8px;">Save Signed Agreement</button>` : ''}`}
+          ${editable ? this.renderSignatureUpload() : '<p class="cell-muted" style="font-size:12px;">Waiting for the consignor\'s signature.</p>'}`}
         </div>
 
         <div class="card col-narrow">
@@ -893,14 +1196,14 @@ const ConsignmentFlow = {
       const suggested = this.suggestedFee(i);
       return `
         <div class="field-group">
-          <label class="field-label">Provider & Fee</label>
+          <label class="field-label">Authentication Service & Fee</label>
           <select class="field-input" id="int-fee" ${editable ? '' : 'disabled'}>
             ${DB.authFeeSchedule.map((f) => {
               const key = `${f.provider}/${f.category}`;
               return `<option value="${key}" ${key === suggested ? 'selected' : ''}>${escapeHtml(FEE_LABELS[key] || key)} — ${this.peso(f.fee)}</option>`;
             }).join('')}
           </select>
-          <small class="cell-muted">Non-refundable, paid upfront. The database sets the fee from the schedule.</small>
+          <small class="cell-muted">Non-refundable and paid upfront. The fee is based on the selected provider and service.</small>
         </div>
         ${editable ? '<button class="btn-confirm" id="int-request-payment" style="width:100%;">Request Authentication Payment</button>' : ''}`;
     }
@@ -927,7 +1230,7 @@ const ConsignmentFlow = {
 
     if (i.stage === 'dropoff_pickup_courier') this.bindPhotoUploads(i);
     else this.fillPhotos('intake-photos');
-    if (document.getElementById('signature-pad') && typeof initSignaturePad === 'function') initSignaturePad();
+        this.bindSignatureUpload(i);
 
     on('int-history', () => this.showHistory(i));
 
@@ -982,18 +1285,6 @@ const ConsignmentFlow = {
         }));
       });
     }
-
-    on('int-sign', (btn) => {
-      const sig = window.getSignatureData ? window.getSignatureData() : null;
-      const pad = document.querySelector('.signature-container');
-      if (Validate.show(null, [[pad, sig ? null : 'Ask the consignor to sign in the box first.']])) return;
-      this.save(btn, 'Agreement signed and attached.', async () => {
-        const { data, error } = await sbClient.from('consignment_agreements')
-          .insert({ consignor_id: i.consignor.id, signature_data: sig }).select('id').single();
-        if (error) throw error;
-        await this.updateItem(i.id, { agreement_id: data.id });
-      });
-    });
 
     on('int-revision-done', (btn) => {
       this.save(btn, `${i.code} sent back to the manager for approval.`, () => this.updateItem(i.id, { current_stage: 'manager_approval' }));

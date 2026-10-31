@@ -5,8 +5,8 @@ create table public.app_settings (
 );
 
 insert into public.app_settings (key, value) values
-  ('authenticity_footer', 'All items sold by Purse Maison are authenticated by our team. [Replace with the official authenticity guarantee wording]'),
-  ('layaway_clause', 'Layaway is available for this item. [Replace with the official layaway terms]');
+  ('authenticity_footer', 'All items sold by Purse Maison are authenticated by our team.'),
+  ('layaway_clause', 'Layaway is available for this item.');
 
 alter table public.app_settings enable row level security;
 

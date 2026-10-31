@@ -86,7 +86,7 @@ Object.assign(ConsignmentFlow, {
           <div style="font-size:12.5px; margin-bottom:14px; line-height:1.7;">
             Final result: ${this.authCell(i)}<br>
             1st check: ${escapeHtml(a.primary_authenticator_id ? this.staffName(a.primary_authenticator_id) : '—')} — ${this.resultBadge(a.primary_result)}<br>
-            2nd check: ${escapeHtml(a.secondary_authenticator_id ? this.staffName(a.secondary_authenticator_id) : '—')} — ${this.resultBadge(a.secondary_result)}<br>
+            2nd check: ${a.secondary_authenticator_id ? `${escapeHtml(this.staffName(a.secondary_authenticator_id))} — ${this.resultBadge(a.secondary_result)}` : '<span class="cell-muted">Not used (single check)</span>'}<br>
             ${a.certificate_url ? '<button class="btn-secondary" id="mgr-view-cert" style="padding:3px 10px; font-size:12px; margin-top:4px;">View Certificate</button>' : '<span class="cell-muted">No certificate on file</span>'}
           </div>
 
