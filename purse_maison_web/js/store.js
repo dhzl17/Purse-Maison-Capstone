@@ -51,7 +51,8 @@ const DataStore = {
         this._run('items', () => this.loadItems()),
         this._run('sales history', () => this.loadSalesSeries()),
         this._run('clients', () => this.loadClients()),
-        this._run('customer interactions', () => this.loadCustomerInteractions()),
+        this._run('daily sales', () => this.loadDailySales()),
+        this._run('daily interactions', () => this.loadDailyInteractions()),
         this._run('consignments', () => this.loadPipeline()),
       ]);
       // The forecast summary compares against sales history, so it loads after it.
@@ -285,6 +286,54 @@ const DataStore = {
     }));
   },
 
+  async fetchAllRows(view, columns, orderColumns) {
+    const pageSize = 1000;
+    const rows = [];
+    for (let from = 0; ; from += pageSize) {
+      let query = sbClient.from(view).select(columns);
+      for (const col of orderColumns) query = query.order(col, { ascending: true });
+      const { data, error } = await query.range(from, from + pageSize - 1);
+      if (error) throw error;
+      rows.push(...data);
+      if (data.length < pageSize) return rows;
+    }
+  },
+
+  async loadDailySales() {
+    try {
+      const rows = await this.fetchAllRows('daily_brand_sales', 'sale_day, brand, brand_key, units_sold, revenue', ['sale_day', 'brand_key']);
+      DB.dailySales = rows.map((r) => ({
+        date: this.parseDateOnly(r.sale_day),
+        amount: Number(r.revenue) || 0,
+        units: r.units_sold || 0,
+        brand: r.brand,
+        brandKey: r.brand_key,
+      }));
+    } catch (err) {
+      DB.dailySales = [];
+      throw err;
+    }
+  },
+
+  async loadDailyInteractions() {
+    try {
+      const rows = await this.fetchAllRows('customer_interaction_daily',
+        'day, consigned, consignor_not_proceeded, buyer_purchased, buyer_not_proceeded, in_progress, total_inquiries', ['day']);
+      DB.dailyInteractions = rows.map((r) => ({
+        date: this.parseDateOnly(r.day),
+        consigned: r.consigned || 0,
+        consignorNotProceeded: r.consignor_not_proceeded || 0,
+        buyerPurchased: r.buyer_purchased || 0,
+        buyerNotProceeded: r.buyer_not_proceeded || 0,
+        inProgress: r.in_progress || 0,
+        total: r.total_inquiries || 0,
+      }));
+    } catch (err) {
+      DB.dailyInteractions = [];
+      throw err;
+    }
+  },
+  
   // ------------------------------------------------------------- pipeline
   async loadPipeline() {
     const [items, consignors, fees, staff, tiers] = await Promise.all([

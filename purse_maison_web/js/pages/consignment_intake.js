@@ -94,6 +94,7 @@ const ConsignmentFlow = {
   selected: { preintake: null, intake: null },
   overviewSearch: '',
   overviewSort: 'recently',
+  overviewRange: null,
   overviewStages: null,
   overviewPage: 1,
   overviewPageSize: 10,
@@ -623,6 +624,8 @@ const ConsignmentFlow = {
       const stages = new Set(this.overviewStages);
       list = list.filter((i) => stages.has(i.stage));
     }
+    const ovRange = resolveDateRange(this.overviewRange, 'day', 'all');
+    if (ovRange.start) list = list.filter((i) => inDateRange(i.updatedAt ? new Date(i.updatedAt) : null, ovRange));
     const priceOf = (i) => i.price ?? i.askingPrice ?? 0;
     if (this.overviewSort === 'oldest') list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     else if (this.overviewSort === 'alphabetical') list.sort((a, b) => this.itemName(a).localeCompare(this.itemName(b)));
@@ -657,10 +660,16 @@ const ConsignmentFlow = {
             searchPlaceholder: 'Search stage',
             emptyText: 'No consignment items yet.',
           })}
-          <select class="sort-select" id="cons-overview-sort">
-            ${[['recently', 'Recently Added'], ['oldest', 'Oldest First'], ['price-high', 'Price High to Low'], ['price-low', 'Price Low to High'], ['alphabetical', 'Alphabetical A-Z']]
-              .map(([v, l]) => `<option value="${v}" ${this.overviewSort === v ? 'selected' : ''}>Sort by: ${l}</option>`).join('')}
-          </select>
+          ${renderDateRangeFilter('cons-overview-date', { label: 'Last Update', value: this.overviewRange })}
+          ${renderTreeFilter('cons-overview-sort', {
+            label: 'Sort',
+            items: [['recently', 'Recently Added'], ['oldest', 'Oldest First'], ['price-high', 'Price High to Low'], ['price-low', 'Price Low to High'], ['alphabetical', 'Alphabetical A-Z']]
+              .map(([value, label]) => ({ value, label })),
+            selected: this.overviewSort,
+            single: true,
+            defaultValue: 'recently',
+            search: false,
+          })}
         </div>
         ${canStart ? '<button class="btn-add" id="cons-new-inquiry">+ New Inquiry</button>' : ''}
       </div>
@@ -672,7 +681,7 @@ const ConsignmentFlow = {
             <th class="ov-price">Price</th><th class="ov-updated">Last Update</th><th class="ov-history">History</th>
           </tr></thead>
           <tbody>
-            ${list.length === 0 ? `<tr><td colspan="9" class="cell-muted" style="text-align:center; padding:24px;">${DB.pipelineItems.length ? 'No items match your search.' : 'No consignment items yet.'}</td></tr>` :
+            ${list.length === 0 ? `<tr><td colspan="9" class="cell-muted" style="text-align:center; padding:24px;">${DB.pipelineItems.length ? 'No items match your search or filters.' : 'No consignment items yet.'}</td></tr>` :
               pageList.map((i) => `
               <tr style="vertical-align:middle;">
                 <td class="ov-id"><strong>${escapeHtml(i.code)}</strong></td>
@@ -716,9 +725,9 @@ const ConsignmentFlow = {
         if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
       }, 300));
     }
-    const sort = document.getElementById('cons-overview-sort');
-    if (sort) sort.addEventListener('change', (e) => { this.overviewSort = e.target.value; this.overviewPage = 1; Router.rerender(); });
+    bindTreeFilter('cons-overview-sort', (value) => { this.overviewSort = value; this.overviewPage = 1; Router.rerender(); });
     bindTreeFilter('cons-overview-stage', (stages) => { this.overviewStages = stages; this.overviewPage = 1; Router.rerender(); });
+    bindDateRangeFilter('cons-overview-date', (value) => { this.overviewRange = value; this.overviewPage = 1; Router.rerender(); });
     const pager = document.getElementById('cons-overview-pagination');
     if (pager) pager.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-page]');

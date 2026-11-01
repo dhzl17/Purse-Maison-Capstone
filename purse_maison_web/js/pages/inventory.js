@@ -9,7 +9,7 @@ const InventoryPage = {
   currentPage: 1,
   searchKeyword: '',
   sortBy: 'recently',
-  filterMonths: null,  
+  filterRange: null,   
   filterBrands: null,
 
   statusBadge(status) {
@@ -64,10 +64,8 @@ const InventoryPage = {
   filterAndSortItems(items) {
     let list = [...items];
 
-    if (this.filterMonths !== null) {
-      const months = new Set(this.filterMonths);
-      list = list.filter((i) => months.has(this.monthKeyOf(i)));
-    }
+    const range = resolveDateRange(this.filterRange, 'day', 'all');
+    if (range.start) list = list.filter((i) => inDateRange(parseDateAdded(i.dateAdded), range));
 
     if (this.filterBrands !== null) {
       const brands = new Set(this.filterBrands);
@@ -117,13 +115,7 @@ const InventoryPage = {
       <div class="filter-toolbar-row">
         <div class="filter-controls-group">
           ${renderUniversalSearchBar('inventory-search-input', 'Search by ID, Brand...')}
-          ${renderTreeFilter('inventory-date-filter', {
-            label: 'Date Added',
-            groups: this.dateFilterGroups(allItems),
-            selected: this.filterMonths,
-            searchPlaceholder: 'Search month or year',
-            emptyText: 'No dates to filter yet.',
-          })}
+          ${renderDateRangeFilter('inventory-date-filter', { label: 'Date Added', value: this.filterRange })}
           ${renderTreeFilter('inventory-brand-filter', {
             label: 'Brand',
             items: uniqueBrands.map((b) => ({ value: b, label: b })),
@@ -131,13 +123,15 @@ const InventoryPage = {
             searchPlaceholder: 'Search brand',
             emptyText: 'No brands yet.',
           })}
-          <select class="sort-select" id="inventory-sort-select">
-            <option value="recently" ${this.sortBy === 'recently' ? 'selected' : ''}>Sort: Recently Added</option>
-            <option value="oldest" ${this.sortBy === 'oldest' ? 'selected' : ''}>Sort: Oldest First</option>
-            <option value="price-high" ${this.sortBy === 'price-high' ? 'selected' : ''}>Sort: Price High to Low</option>
-            <option value="price-low" ${this.sortBy === 'price-low' ? 'selected' : ''}>Sort: Price Low to High</option>
-            <option value="alphabetical" ${this.sortBy === 'alphabetical' ? 'selected' : ''}>Sort: Brand A-Z</option>
-          </select>
+          ${renderTreeFilter('inventory-sort', {
+            label: 'Sort',
+            items: [['recently', 'Recently Added'], ['oldest', 'Oldest First'], ['price-high', 'Price High to Low'], ['price-low', 'Price Low to High'], ['alphabetical', 'Brand A-Z']]
+              .map(([value, label]) => ({ value, label })),
+            selected: this.sortBy,
+            single: true,
+            defaultValue: 'recently',
+            search: false,
+          })}
         </div>
         ${viewOnly ? '' : `<button class="btn-add" id="btn-add-inventory">+ Add Item</button>`}
       </div>
@@ -226,8 +220,8 @@ const InventoryPage = {
       }, 300));
     }
 
-    bindTreeFilter('inventory-date-filter', (months) => {
-      this.filterMonths = months;
+    bindDateRangeFilter('inventory-date-filter', (value) => {
+      this.filterRange = value;
       this.currentPage = 1;
       Router.rerender();
     });
@@ -238,14 +232,11 @@ const InventoryPage = {
       Router.rerender();
     });
 
-    const sortSelect = document.getElementById('inventory-sort-select');
-    if (sortSelect) {
-      sortSelect.addEventListener('change', (e) => {
-        this.sortBy = e.target.value;
-        this.currentPage = 1;
-        Router.rerender();
-      });
-    }
+    bindTreeFilter('inventory-sort', (value) => {
+      this.sortBy = value;
+      this.currentPage = 1;
+      Router.rerender();
+    });
 
     document.getElementById('inventory-pagination').addEventListener('click', (e) => {
       const btn = e.target.closest('[data-page]');
@@ -284,13 +275,8 @@ const InventoryPage = {
         <div style="width:24px;text-align:right;font-size:12px;color:var(--text-muted)">${value}</div>
       </div>`).join('') : '<p class="cell-muted">No inventory yet</p>';
 
-    const thisYear = new Date().getFullYear();
-    const months = this.filterMonths === null || !this.filterMonths.length
-      ? lastNMonths(6)
-      : [...this.filterMonths].sort().map((key) => {
-        const [y, m] = key.split('-').map(Number);
-        return { label: MONTH_ABBREV[m - 1] + (y !== thisYear ? ` '${String(y).slice(2)}` : ''), year: y, month: m };
-      });
+    const dateRange = resolveDateRange(this.filterRange, 'day', 'all');
+    const months = dateRange.start ? dateRangeMonths(dateRange) : lastNMonths(6);
     const soldCounts = monthlySoldCounts(DB.salesTransactions, months);
     const turnoverByMonth = soldCounts.map((c) => (filteredItems.length ? (c / filteredItems.length) * 100 : 0));
     makeLineChart('chart-turnover', months.map((m) => m.label), [{

@@ -2150,3 +2150,69 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   text-align: left;
 }
 .field-error li + li { margin-top: 2px; }
+
+
+/* ==========================================================================
+   Date range filter (presets + custom calendar range) — js/date_range.js
+   ========================================================================== */
+.date-range-icon { width: 15px; height: 15px; color: var(--card-navy-dark); flex-shrink: 0; }
+.date-range .date-range-panel { width: auto; min-width: 180px; padding: 8px; }
+.date-range.is-custom .date-range-panel { display: flex; align-items: flex-start; gap: 10px; }
+.date-range-presets { display: flex; flex-direction: column; gap: 2px; min-width: 160px; }
+.date-range-preset {
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text-dark);
+  cursor: pointer;
+}
+.date-range-preset:hover { background: var(--chip-bg); }
+.date-range-preset.is-current { background: var(--chip-bg); font-weight: 600; color: var(--card-navy-dark); }
+.date-range-custom-btn { margin-top: 4px; border-top: 1px solid var(--border-light); border-radius: 0 0 8px 8px; padding-top: 10px; color: var(--card-navy-dark); font-weight: 600; }
+
+.date-range-custom { width: 268px; border-left: 1px solid var(--border-light); padding-left: 10px; }
+.date-range-custom-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-dark); margin-bottom: 8px; }
+.date-range-custom-head span { flex: 1; text-align: center; padding-right: 26px; }
+.date-range-x {
+  width: 20px; height: 20px; border-radius: 50%; border: none; background: var(--chip-bg);
+  color: var(--text-muted); font-size: 14px; line-height: 1; cursor: pointer;
+}
+.date-range-x:hover { background: var(--border-light); color: var(--text-dark); }
+.date-range-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.date-range-title { font-weight: 700; font-size: 13.5px; color: var(--card-navy-dark); }
+.date-range-step {
+  width: 28px; height: 28px; border: none; border-radius: 8px; background: none;
+  font-size: 18px; line-height: 1; color: var(--card-navy-dark); cursor: pointer;
+}
+.date-range-step:hover:not(:disabled) { background: var(--chip-bg); }
+.date-range-step:disabled { color: var(--border-light); cursor: default; }
+
+.date-range-grid { display: grid; gap: 2px 0; }
+.date-range-grid.is-days { grid-template-columns: repeat(7, 1fr); }
+.date-range-grid.is-months { grid-template-columns: repeat(3, 1fr); gap: 6px 0; }
+.date-range-weekday { text-align: center; font-size: 11px; color: var(--text-muted); padding: 4px 0; }
+.date-range-cell {
+  height: 32px; border: none; background: none; font-family: inherit; font-size: 12.5px;
+  color: var(--text-dark); cursor: pointer; border-radius: 0;
+}
+.date-range-grid.is-months .date-range-cell { height: 36px; font-size: 13px; }
+.date-range-cell:hover:not(:disabled) { color: var(--card-navy-dark); font-weight: 700; }
+.date-range-cell.is-outside { color: #B9B7AF; }
+.date-range-cell.is-today { text-decoration: underline; text-decoration-color: var(--gold); text-underline-offset: 3px; }
+.date-range-cell.is-in { background: #F6EEDA; }
+.date-range-cell.is-edge,
+.date-range-cell.is-edge:hover:not(:disabled) { background: var(--card-navy-dark); color: #fff; font-weight: 700; border-radius: 999px; }
+.date-range-cell:disabled { color: #D9D6CC; cursor: not-allowed; }
+.date-range-hint { font-size: 11.5px; color: var(--text-muted); text-align: center; margin: 8px 0 0; min-height: 16px; }
+.date-range-hint.is-error { color: var(--danger-red); }
+
+@media (max-width: 600px) {
+  .date-range.is-custom .date-range-panel { flex-direction: column; }
+  .date-range-custom { width: min(268px, calc(100vw - 64px)); border-left: none; padding-left: 0; border-top: 1px solid var(--border-light); padding-top: 10px; }
+}
+
+.help-ticket-inbox-head .tree-filter-panel { left: auto; right: 0; }

@@ -696,10 +696,14 @@ const HelpPage = {
       html += `
         <div class="help-section-head help-ticket-inbox-head">
           <h3 class="help-group-title">Ticket Inbox</h3>
-          <select class="sort-select" id="ticket-filter" aria-label="Filter tickets by status">
-            ${[['open', 'New'], ['in_progress', 'In Progress'], ['resolved', 'Resolved'], ['all', 'All tickets']]
-              .map(([v, l]) => `<option value="${v}" ${this.ticketFilter === v ? 'selected' : ''}>${l}</option>`).join('')}
-          </select>
+          ${renderTreeFilter('ticket-filter', {
+            label: 'Status',
+            items: [['open', 'New'], ['in_progress', 'In Progress'], ['resolved', 'Resolved'], ['all', 'All tickets']]
+              .map(([value, label]) => ({ value, label })),
+            selected: this.ticketFilter,
+            single: true,
+            search: false,
+          })}
         </div>
         ${list.length
           ? `<div class="help-ticket-list">${list.map((t) => this.ticketItem(t, true)).join('')}</div>`
@@ -744,7 +748,7 @@ const HelpPage = {
 
   drawTicketLists() {
     const box = document.getElementById('help-ticket-lists');
-    if (box) box.innerHTML = this.ticketListsHtml();
+    bindTreeFilter('ticket-filter', (value) => { this.ticketFilter = value; this.drawTicketLists(); });
     if (!box || this.focusTicketId === null || this.tickets === null) return;
     // Open the ticket chosen in the bell. The inbox copy comes last when it is also under My Tickets.
     const matches = box.querySelectorAll(`[data-ticket-id="${this.focusTicketId}"]`);
@@ -1025,11 +1029,6 @@ const HelpPage = {
       if (e.target.id !== 'help-ticket-form') return;
       e.preventDefault();
       this.submitTicket(e.target);
-    });
-    root.addEventListener('change', (e) => {
-      if (e.target.id !== 'ticket-filter') return;
-      this.ticketFilter = e.target.value;
-      this.drawTicketLists();
     });
   },
 };

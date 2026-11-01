@@ -14,6 +14,10 @@ const WITHDRAW_REASONS = ['Consignor request', 'Unsatisfied with pricing', 'Sold
 
 Object.assign(ConsignmentFlow, {
   salesTab: 'live',
+  salesRange: null,
+  contractStatuses: null,    
+  liveSort: 'days-left',
+  saleStatuses: null,  
   salesPageSize: 6,
   salesPage: { live: 1, sales: 1, done: 1, withdrawals: 1 },
 
@@ -40,6 +44,13 @@ Object.assign(ConsignmentFlow, {
     return badge(`${c.left} days left`, 'success');
   },
 
+  contractState(c) {
+    if (!c) return null;
+    if (c.left <= 0) return 'expired';
+    if (c.left <= 7) return 'ending';
+    return 'active';
+  },
+
   paidSoFar(sale) { return (sale.layaway_payments || []).reduce((s, p) => s + Number(p.amount || 0), 0); },
   paginate(list, key) {
     const size = this.salesPageSize;
@@ -53,6 +64,13 @@ Object.assign(ConsignmentFlow, {
     if (pg.totalPages <= 1) return '';
     return `<div class="pagination" data-sales-pager="${key}">${renderPaginationButtons(pg.page, pg.totalPages)}</div>`;
   },
+
+  saleStatusKey(sale) {
+    if (sale.payout_status === 'released') return 'released';
+    if (sale.payment_status === 'verified') return 'payout';
+    return 'payment';
+  },
+
   saleStatus(sale) {
     if (sale.payout_status === 'released') return badge('Payout released', 'success');
     if (sale.payment_status === 'verified') return badge('Payout pending', 'warning');
@@ -105,24 +123,87 @@ Object.assign(ConsignmentFlow, {
 
   // ------------------------------------------------------------------ render
   renderSales() {
-    const live = DB.pipelineItems.filter((i) => i.listing && i.listing.inventory_status === 'published' && !i.sale && !i.withdrawal);
-    const sales = DB.pipelineItems.filter((i) => i.sale);
+    const range = resolveDateRange(this.salesRange, 'day', 'all');
+    const within = (iso) => inDateRange(iso ? new Date(iso) : null, range);
+    const allLive = DB.pipelineItems.filter((i) => i.listing && i.listing.inventory_status === 'published' && !i.sale && !i.withdrawal);
+    const datedLive = allLive.filter((i) => within(i.listing.published_at));
+    const stateCount = { active: 0, ending: 0, expired: 0 };
+    datedLive.forEach((i) => { const st = this.contractState(this.contractInfo(i)); if (st) stateCount[st] += 1; });
+    const live = datedLive
+      .filter((i) => this.contractStatuses === null || this.contractStatuses.includes(this.contractState(this.contractInfo(i))))
+      .sort((a, b) => {
+        const ca = this.contractInfo(a);
+        const cb = this.contractInfo(b);
+        if (this.liveSort === 'newest') return new Date(b.listing.published_at) - new Date(a.listing.published_at);
+        if (this.liveSort === 'days-most') return (cb ? cb.left : -1e9) - (ca ? ca.left : -1e9);
+        return (ca ? ca.left : 1e9) - (cb ? cb.left : 1e9); // days-left: expired and ending soon first
+      });
+    const sales = DB.pipelineItems.filter((i) => i.sale && within(i.sale.sold_at));
     const openSales = sales.filter((i) => i.sale.payout_status !== 'released')
       .sort((a, b) => new Date(a.sale.sold_at) - new Date(b.sale.sold_at));
     const doneSales = sales.filter((i) => i.sale.payout_status === 'released')
       .sort((a, b) => new Date(b.sale.payout_released_at) - new Date(a.sale.payout_released_at)).slice(0, 20);
-    const withdrawals = DB.pipelineItems.filter((i) => i.withdrawal && i.withdrawal.status !== 'released');
-    const expired = live.filter((i) => { const c = this.contractInfo(i); return c && c.left <= 0; }).length;
+    const saleCount = { payment: 0, payout: 0, released: 0 };
+    sales.forEach((i) => { saleCount[this.saleStatusKey(i.sale)] += 1; });
+    const showSale = (i) => this.saleStatuses === null || this.saleStatuses.includes(this.saleStatusKey(i.sale));
+    const shownOpen = openSales.filter(showSale);
+    const shownDone = doneSales.filter(showSale);
+    const showOpenTable = this.saleStatuses === null || this.saleStatuses.some((k) => k !== 'released');
+    const showDoneTable = this.saleStatuses === null || this.saleStatuses.includes('released');
+      const withdrawals = DB.pipelineItems.filter((i) => i.withdrawal && i.withdrawal.status !== 'released' && within(i.withdrawal.requested_at));
+    const expired = allLive.filter((i) => { const c = this.contractInfo(i); return c && c.left <= 0; }).length;
         const tab = (key, label, n) => `<button type="button" class="sales-tab${this.salesTab === key ? ' active' : ''}" data-sales-tab="${key}" aria-pressed="${this.salesTab === key}">${label} (${n})</button>`;
 
     let body = '';
     if (this.salesTab === 'live') body = this.renderLiveListings(live);
-    else if (this.salesTab === 'sales') body = this.renderSalesTable(openSales, true) + `<div class="card-title" style="margin:22px 0 10px;">Completed (latest 20)</div>` + this.renderSalesTable(doneSales, false);
+    else if (this.salesTab === 'sales') {
+      body = (showOpenTable ? this.renderSalesTable(shownOpen, true) : '')
+        + (showDoneTable ? `<div class="card-title" style="margin:${showOpenTable ? '22px' : '0'} 0 10px;">Completed (latest 20)</div>${this.renderSalesTable(shownDone, false)}` : '');
+    }
     else body = this.renderWithdrawals(withdrawals);
 
     return `
       <h1 class="page-title" style="margin-bottom:4px;">Sales & Payouts</h1>
-      ${expired ? `<div class="card" style="margin-bottom:14px; border-left:4px solid var(--danger-red); padding:10px 14px; font-size:13px;"><strong style="color:var(--danger-red);">${expired} listing(s) past the consignment period.</strong> Extend them with the consignor's agreement, or process a withdrawal.</div>` : ''}
+      ${expired ? `<div class="card" style="margin-bottom:14px; border-left:4px solid var(--danger-red); padding:10px 14px; font-size:13px;"><strong style="color:var(--danger-red);">${expired} listing(s) past the consignment period.</strong> Extend them with the consignor's agreement, or process a withdrawal.
+        <button type="button" class="btn-secondary" id="sales-show-expired" style="margin-left:8px; padding:3px 10px; font-size:12px;">Show them</button></div>` : ''}
+      <div class="filter-toolbar-row" style="margin-bottom:12px;">
+        <div class="filter-controls-group">
+          ${renderDateRangeFilter('sales-date-filter', {
+            label: { live: 'Published', sales: 'Sold', withdrawals: 'Requested' }[this.salesTab] || 'Date',
+            value: this.salesRange,
+          })}
+          ${this.salesTab === 'live' ? `
+          ${renderTreeFilter('sales-contract-filter', {
+            label: 'Contract',
+            items: [
+              { value: 'active', label: `Active (${stateCount.active})` },
+              { value: 'ending', label: `Ending soon (${stateCount.ending})` },
+              { value: 'expired', label: `Expired (${stateCount.expired})` },
+            ],
+            selected: this.contractStatuses,
+            search: false,
+          })}
+          ${renderTreeFilter('sales-live-sort', {
+            label: 'Sort',
+            items: [['days-left', 'Least time remaining'], ['days-most', 'Longest time remaining'], ['newest', 'Recently published']]
+              .map(([value, label]) => ({ value, label })),
+            selected: this.liveSort,
+            single: true,
+            defaultValue: 'days-left',
+            search: false,
+          })}` : ''}
+          ${this.salesTab === 'sales' ? renderTreeFilter('sales-status-filter', {
+            label: 'Status',
+            items: [
+              { value: 'payment', label: `Payment pending (${saleCount.payment})` },
+              { value: 'payout', label: `Payout pending (${saleCount.payout})` },
+              { value: 'released', label: `Payout released (${saleCount.released})` },
+            ],
+            selected: this.saleStatuses,
+            search: false,
+          }) : ''}
+        </div>
+      </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
         ${tab('live', 'Live Listings', live.length)}
         ${tab('sales', 'Sales & Payouts', openSales.length)}
@@ -390,7 +471,38 @@ Object.assign(ConsignmentFlow, {
       });
     });
     all('[data-sales-tab]', (b) => { this.salesTab = b.dataset.salesTab; Router.rerender(); });
-        all('[data-sell]', (b) => this.openSaleModal(this.item(b.dataset.sell)));
+    bindDateRangeFilter('sales-date-filter', (value) => {
+      this.salesRange = value;
+      this.salesPage = { live: 1, sales: 1, done: 1, withdrawals: 1 };
+      Router.rerender();
+    });
+    bindTreeFilter('sales-contract-filter', (states) => {
+      this.contractStatuses = states;
+      this.salesPage.live = 1;
+      Router.rerender();
+    });
+
+    bindTreeFilter('sales-status-filter', (states) => {
+      this.saleStatuses = states;
+      this.salesPage.sales = 1;
+      this.salesPage.done = 1;
+      Router.rerender();
+    });
+
+    bindTreeFilter('sales-live-sort', (value) => {
+      this.liveSort = value;
+      this.salesPage.live = 1;
+      Router.rerender();
+    });
+    document.getElementById('sales-show-expired')?.addEventListener('click', () => {
+      this.salesTab = 'live';
+      this.contractStatuses = ['expired'];
+      this.salesRange = null;
+      this.salesPage.live = 1;
+      Router.rerender();
+    });
+
+    all('[data-sell]', (b) => this.openSaleModal(this.item(b.dataset.sell)));
     all('[data-extend]', (b) => this.openExtendModal(this.item(b.dataset.extend)));
     all('[data-withdraw]', (b) => this.openWithdrawModal(this.item(b.dataset.withdraw)));
     all('[data-installment]', (b) => this.openInstallmentModal(this.item(b.dataset.installment)));

@@ -12,6 +12,7 @@ const CLIENT_WRITE_ROLES = ['consignmentTeam', 'salesAssociate', 'manager', 'sup
 const ClientsPage = {
   searchKeyword: '',
   sortBy: 'recently',
+  filterRange: null,
   activityPage: 1,
   activityPageSize: 5,
   inquiryPage: 1,
@@ -70,6 +71,8 @@ const ClientsPage = {
         String(i.assignedName || '').toLowerCase().includes(kw)
       );
     }
+    const range = resolveDateRange(this.filterRange, 'day', 'all');
+    if (range.start) list = list.filter((i) => inDateRange(i.createdAt ? new Date(i.createdAt) : null, range));
     if (this.sortBy === 'alphabetical') list.sort((a, b) => (a.clientName || '').localeCompare(b.clientName || ''));
     else if (this.sortBy === 'oldest') list.sort((a, b) => a.no - b.no);
     else list.sort((a, b) => b.no - a.no);
@@ -92,11 +95,16 @@ const ClientsPage = {
       <div class="filter-toolbar-row" style="margin-bottom:14px;">
         <div class="filter-controls-group">
           ${renderUniversalSearchBar('clients-search-input', 'Search by Name, Type...')}
-          <select class="sort-select" id="clients-sort-select">
-            <option value="recently" ${this.sortBy === 'recently' ? 'selected' : ''}>Sort: Recently Added</option>
-            <option value="oldest" ${this.sortBy === 'oldest' ? 'selected' : ''}>Sort: Oldest First</option>
-            <option value="alphabetical" ${this.sortBy === 'alphabetical' ? 'selected' : ''}>Sort: Name A-Z</option>
-          </select>
+          ${renderDateRangeFilter('clients-date-filter', { label: 'Inquiry Date', value: this.filterRange })}
+          ${renderTreeFilter('clients-sort', {
+            label: 'Sort',
+            items: [['recently', 'Recently Added'], ['oldest', 'Oldest First'], ['alphabetical', 'Name A-Z']]
+              .map(([value, label]) => ({ value, label })),
+            selected: this.sortBy,
+            single: true,
+            defaultValue: 'recently',
+            search: false,
+          })}
         </div>
       </div>
 
@@ -122,7 +130,7 @@ const ClientsPage = {
                 </tr>
               </thead>
               <tbody>
-                ${inquiries.length === 0 ? `<tr><td colspan="${canWrite ? 9 : 8}" class="cell-center cell-muted" style="padding:18px; text-align: center;">${DB.clientInquiries.length === 0 ? 'No inquiries yet.' : 'No inquiries match your search.'}</td></tr>` :
+                ${inquiries.length === 0 ? `<tr><td colspan="${canWrite ? 9 : 8}" class="cell-center cell-muted" style="padding:18px; text-align: center;">${DB.clientInquiries.length === 0 ? 'No inquiries yet.' : 'No inquiries match your search or filters.'}</td></tr>` :
                   inquiries.map((i) => `
                   <tr style="text-align: center; vertical-align: middle;">
                     <td style="text-align: center; vertical-align: middle;">${i.no}</td>
@@ -209,14 +217,17 @@ const ClientsPage = {
       }, 300));
     }
 
-    const sortSelect = document.getElementById('clients-sort-select');
-    if (sortSelect) {
-      sortSelect.addEventListener('change', (e) => {
-        this.sortBy = e.target.value;
-        this.inquiryPage = 1;
-        Router.rerender();
-      });
-    }
+    bindTreeFilter('clients-sort', (value) => {
+      this.sortBy = value;
+      this.inquiryPage = 1;
+      Router.rerender();
+    });
+
+    bindDateRangeFilter('clients-date-filter', (value) => {
+      this.filterRange = value;
+      this.inquiryPage = 1;
+      Router.rerender();
+    });
 
     document.getElementById('clients-pagination')?.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-page]');
