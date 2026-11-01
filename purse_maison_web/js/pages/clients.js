@@ -357,7 +357,7 @@ const ClientsPage = {
       const form = e.target;
       const submit = form.querySelector('button[type="submit"]');
       submit.disabled = true;
-      const ok = await this.saveInquiry(existing, new FormData(form));
+      const ok = await this.saveInquiry(existing, new FormData(form), form);
       if (ok) {
         closeModal();
       } else {

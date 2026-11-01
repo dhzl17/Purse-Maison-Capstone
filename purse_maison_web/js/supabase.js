@@ -6,7 +6,7 @@
 const sbClient = window.supabase.createClient(
   PM_CONFIG.SUPABASE_URL,
   PM_CONFIG.SUPABASE_PUBLISHABLE_KEY,
-  { auth: { persistSession: true, autoRefreshToken: true } },
+  { auth: { persistSession: true, autoRefreshToken: true, storage: window.sessionStorage } },
 );
 
 // Database role names -> the role keys the frontend already uses (see ROLES in auth.js)

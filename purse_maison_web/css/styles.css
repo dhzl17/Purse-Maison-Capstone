@@ -187,7 +187,7 @@ img { max-width: 100%; display: block; }
 .login-options-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   font-size: 12px;
   margin-bottom: 18px;
   color: var(--text-muted);
