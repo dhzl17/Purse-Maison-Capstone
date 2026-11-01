@@ -188,7 +188,7 @@ Object.assign(ConsignmentFlow, {
       action = '<div class="cell-muted" style="font-size:12px; margin-top:8px;">Waiting for the 2nd result. To finish with one check, unassign the 2nd authenticator.</div>';
     }
     const note = second
-      ? '<div class="cell-muted" style="font-size:12px; margin-top:6px;">When both results agree, the item moves on automatically: Authentic → Photography, Fake → closed.</div>'
+      ? '<div class="cell-muted" style="font-size:12px; margin-top:6px;">Matching results move the item on automatically.</div>'
       : '';
     return `${this.checklistHtml(checks)}${action}${note}`;
   },

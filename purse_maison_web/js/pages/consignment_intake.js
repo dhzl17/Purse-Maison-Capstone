@@ -1212,7 +1212,7 @@ const ConsignmentFlow = {
               return `<option value="${key}" ${key === suggested ? 'selected' : ''}>${escapeHtml(FEE_LABELS[key] || key)} — ${this.peso(f.fee)}</option>`;
             }).join('')}
           </select>
-          <small class="cell-muted">Non-refundable and paid upfront. The fee is based on the selected provider and service.</small>
+          <small class="cell-muted">Non-refundable. Based on the provider and service.</small>
         </div>
         ${editable ? '<button class="btn-confirm" id="int-request-payment" style="width:100%;">Request Authentication Payment</button>' : ''}`;
     }
@@ -1228,7 +1228,7 @@ const ConsignmentFlow = {
         <input class="field-input" id="int-pay-ref" placeholder="e.g. QPH-992019203" ${editable ? '' : 'disabled'}>
       </div>
       ${editable ? '<button class="btn-confirm" id="int-confirm-payment" style="width:100%;">Confirm Payment</button>' : ''}
-      <small class="cell-muted">Confirming moves the item to the authentication queue and starts the 24-hour timer.</small>`;
+      <small class="cell-muted">Starts the 24-hour authentication timer.</small>`;
   },
 
   bindIntake() {

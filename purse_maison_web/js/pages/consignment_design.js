@@ -121,7 +121,6 @@ Object.assign(ConsignmentFlow, {
           <div class="card-title" style="margin-bottom:6px;">${escapeHtml(i.code)} · ${escapeHtml(this.itemName(i))}</div>
           ${returned ? `<div style="background:#FEF2F2; border:1px solid #FCA5A5; border-radius:8px; padding:10px; font-size:12.5px; margin:8px 0 12px;">
             <strong style="color:var(--danger-red);">Returned by the manager</strong> (${escapeHtml(this.fmtDate(returned.reviewed_at))})${returned.notes ? `: ${escapeHtml(returned.notes)}` : ''}</div>` : ''}
-          <p class="cell-muted" style="font-size:12px; margin:4px 0 12px;">Upload the edited version of each shot, then choose the single best image as the cover.</p>
           <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:10px;">
             ${photos.map((p) => `
               <div style="border:${p.is_primary ? '2px solid var(--card-navy-dark)' : '1px solid #E2E8F0'}; padding:8px; border-radius:8px; text-align:center;">

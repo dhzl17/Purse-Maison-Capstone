@@ -174,7 +174,7 @@ const ForecastingPage = {
           ${this.canRequestForecast() ? `<button class="btn-confirm" id="btn-request-forecast" ${busy ? 'disabled' : ''}>${busy ? 'Forecast in progress…' : 'Request New Forecast'}</button>` : ''}
         </div>
         <div class="cell-muted" style="margin-top:12px;font-size:12.5px;">${statusLine}${runBadge}</div>
-        ${hasForecast ? '' : `<div class="cell-muted" style="margin-top:8px;font-size:12.5px;">A forecast needs enough monthly sales history per brand (12 months or more). It will appear here once the client's historical sales are imported and the forecast job has run.</div>`}
+        ${hasForecast ? '' : `<div class="cell-muted" style="margin-top:8px;font-size:12.5px;">Forecasts appear for brands with at least 12 months of sales.</div>`}
       </div>
 
       <div class="chart-row">

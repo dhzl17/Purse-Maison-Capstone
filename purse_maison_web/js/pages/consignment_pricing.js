@@ -107,7 +107,7 @@ Object.assign(ConsignmentFlow, {
             ${act ? '<button class="btn-confirm" id="price-save">Save Price</button>' : ''}
             ${act && suggested ? `<button class="btn-secondary" id="price-suggest" data-price="${suggested}">Suggest: ${this.peso(suggested)}</button>` : ''}
           </div>
-          ${suggested ? `<small class="cell-muted">Suggested = the lowest price whose payout covers the agreed ${this.peso(i.agreedPayout)}. Adjust for market value.</small>` : ''}
+          ${suggested ? `<small class="cell-muted">Covers the agreed payout of ${this.peso(i.agreedPayout)}. Adjust for market value.</small>` : ''}
           <div id="price-preview" style="margin-top:12px;"></div>
         </div>
 

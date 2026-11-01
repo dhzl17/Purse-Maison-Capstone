@@ -95,7 +95,6 @@ const SettingsPage = {
               <input class="field-input" value="${escapeHtml(Session.roleLabel())}" readonly style="background:var(--chip-bg); font-weight:600; color:var(--card-navy-dark);" />
             </div>
             <button type="submit" class="btn-confirm" style="margin-top:8px;">Save Changes</button>
-            <p class="cell-muted" style="font-size:12px; margin-top:8px;">Only the owner can change usernames and roles.</p>
           </form>
         </div>
 
@@ -125,7 +124,6 @@ const SettingsPage = {
               <select class="field-input" id="settings-auto-logout" ${this.prefs ? '' : 'disabled'}>
                 ${AUTO_LOGOUT_CHOICES.map(([v, l]) => `<option value="${v}" ${autoLogout === v ? 'selected' : ''}>${l}</option>`).join('')}
               </select>
-              <small class="cell-muted">Recommended on shared staff computers.</small>
             </div>
           </div>
         </div>
@@ -189,7 +187,7 @@ const SettingsPage = {
           <div class="card-title">Team Accounts & Role Permissions</div>
           <button class="btn-add" id="btn-add-staff">+ Add Staff Account</button>
         </div>
-        <p class="cell-muted" style="font-size:13px; margin-bottom:18px;">Create staff logins, change roles, and remove access. Deactivated staff can no longer log in or see any data.</p>
+        <p class="cell-muted" style="font-size:13px; margin-bottom:18px;">Deactivated staff can no longer log in.</p>
         <div id="staff-list">${body}</div>
       </div>`;
   },
@@ -401,7 +399,7 @@ const SettingsPage = {
         <div class="field-group">
           <label class="field-label">Username</label>
           <input class="field-input" name="username" placeholder="e.g. ssantos" required pattern="[a-z0-9._\\-]{3,30}" title="3–30 lowercase letters, numbers, dots, dashes or underscores" />
-          <small class="cell-muted">They log in with this. Their login email becomes username@${escapeHtml(PM_CONFIG.STAFF_EMAIL_DOMAIN)}.</small>
+          <small class="cell-muted">Used to log in.</small>
         </div>
         <div class="field-group">
           <label class="field-label">Temporary Password (at least ${MIN_PASSWORD_LENGTH} characters)</label>

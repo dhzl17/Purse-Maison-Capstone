@@ -302,7 +302,7 @@ const InventoryPage = {
       <div class="leaderboard-row">
         <div class="leaderboard-name">${escapeHtml(e.name)}</div>
         <div class="leaderboard-meta">${e.days} Days &nbsp; ${escapeHtml(e.price)}</div>
-      </div>`).join('') : '<p class="cell-muted">No sales history yet — this fills in once items start selling.</p>';
+      </div>`).join('') : '<p class="cell-muted">No sales yet.</p>';
   },
 
   openForm(existing) {
