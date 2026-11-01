@@ -84,7 +84,7 @@ const ROLES = {
     badgeColor: '#DC2626',
     defaultRoute: 'consignment-pricing',
     allowedRoutes: [
-      'consignment-pricing', 'forecasting', 'inventory', 'settings', 'help'
+      'dashboard', 'consignment-pricing', 'forecasting', 'inventory', 'settings', 'help'
     ],
     inventoryViewOnly: false,
     forecastingViewOnly: false,
