@@ -199,7 +199,7 @@ Object.assign(ConsignmentFlow, {
               <div><strong>Added automatically:</strong> ${escapeHtml(l.authenticity_footer || '(authenticity footer not set)')}</div>
               <div style="margin-top:4px;">${layaway ? `<strong>Layaway clause (price ₱200,000+):</strong> ${escapeHtml(l.layaway_clause || '(layaway wording not set)')}` : 'No layaway clause (price below ₱200,000).'}</div>
             </div>
-            ${act ? '<button type="submit" class="btn-secondary" style="margin-top:12px;">Save</button>' : ''}
+            ${act ? '<button type="submit" class="btn-secondary" style="margin-top:12px;">Save Draft</button>' : ''}
           </form>
         </div>
 

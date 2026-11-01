@@ -100,6 +100,12 @@ const InventoryPage = {
     const available = allItems.filter((i) => i.status === 'available').length;
     const reserved = allItems.filter((i) => i.status === 'reserved').length;
 
+    const expiring = DB.pipelineItems.filter((i) => {
+      if (!i.listing || i.listing.inventory_status !== 'published' || i.sale || i.withdrawal) return false;
+      const c = ConsignmentFlow.contractInfo(i);
+      return c && c.left <= 7;
+    }).length;
+
     const uniqueBrands = [...new Set(allItems.map(i => i.brand).filter(Boolean))].sort();
 
     return `
@@ -109,7 +115,7 @@ const InventoryPage = {
         <div class="stat-card"><div class="stat-title">Total Items</div><div class="stat-value-row"><span class="stat-value">${total}</span></div></div>
         <div class="stat-card"><div class="stat-title">Available Items</div><div class="stat-value-row"><span class="stat-value">${available}</span></div></div>
         <div class="stat-card"><div class="stat-title">Reserved Items</div><div class="stat-value-row"><span class="stat-value">${reserved}</span></div></div>
-        <div class="stat-card"><div class="stat-title">Low Stock Items</div><div class="stat-value-row"><span class="stat-value">0</span></div></div>
+        <div class="stat-card" title="Live listings with 7 days or fewer left on their contract, including expired ones"><div class="stat-title">Expiring Contracts</div><div class="stat-value-row"><span class="stat-value">${expiring}</span></div></div>
       </div>
 
       <div class="filter-toolbar-row">
