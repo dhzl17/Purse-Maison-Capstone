@@ -118,11 +118,11 @@ const DataStore = {
   },
 
   async loadItems() {
-    const { data, error } = await sbClient
+    const { data, error } = await this.fetchPaged(() => sbClient
       .from('consignment_items')
       .select('item_code, brand, model, category, condition_notes, price, current_stage, created_at, listings(inventory_status, published_at), sales_transactions(payment_status, sale_price, sold_at)')
       .order('created_at', { ascending: false })
-      .limit(1000);
+      .order('id', { ascending: true }));
 
     if (error) {
       DB.inventory = [];
@@ -286,6 +286,17 @@ const DataStore = {
     }));
   },
 
+  async fetchPaged(build) {
+    const pageSize = 1000;
+    const rows = [];
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await build().range(from, from + pageSize - 1);
+      if (error) return { data: null, error };
+      rows.push(...data);
+      if (data.length < pageSize) return { data: rows, error: null };
+    }
+  },
+
   async fetchAllRows(view, columns, orderColumns) {
     const pageSize = 1000;
     const rows = [];
@@ -337,7 +348,7 @@ const DataStore = {
   // ------------------------------------------------------------- pipeline
   async loadPipeline() {
     const [items, consignors, fees, staff, tiers] = await Promise.all([
-      sbClient.from('consignment_items')
+        this.fetchPaged(() => sbClient.from('consignment_items')
         .select(`id, item_code, brand, model, color, category, hardware, serial_number, microchip_number, date_code,
                  condition_notes, accessories_included, price, consignor_payout, current_stage, lead_status,
                  inquiry_channel, inquiry_notes, asking_price, agreed_payout, fulfillment_method, appointment_at,
@@ -361,8 +372,8 @@ const DataStore = {
                  contract_extensions(extra_days, notes, created_at),
                  manager_reviews(decision, return_reason, notes, reviewed_at)`)
         .order('created_at', { ascending: false })
-        .limit(1000),
-      sbClient.from('consignors').select('id, full_name, phone, email').order('full_name').limit(1000),
+        .order('id', { ascending: true })),
+      this.fetchPaged(() => sbClient.from('consignors').select('id, full_name, phone, email').order('full_name').order('id')),
       sbClient.from('authentication_fee_schedule').select('provider, category, fee').order('provider'),
       sbClient.from('profiles').select('id, full_name, role, is_active').limit(500),
       sbClient.from('markup_tier_schedule').select('threshold_price, comparison, category_restriction, markup_type, markup_value'),
