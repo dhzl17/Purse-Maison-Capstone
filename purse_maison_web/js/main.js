@@ -15,12 +15,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const togglePasswordBtn = document.getElementById('login-toggle-password');
   const usernameInput = document.getElementById('login-username');
 
-  document.getElementById('landing-enter-btn')?.addEventListener('click', () => {
+
+  let leftLandingAt = 0;
+  const goToLogin = () => {
+    if (landingView.classList.contains('hidden')) return; 
+    leftLandingAt = Date.now();
     landingView.classList.add('hidden');
     loginView.classList.remove('hidden');
-  });
+  };
+  landingView.addEventListener('click', goToLogin);
 
   document.getElementById('login-back-btn')?.addEventListener('click', () => {
+    if (Date.now() - leftLandingAt < 500) return;
     loginView.classList.add('hidden');
     landingView.classList.remove('hidden');
   });
