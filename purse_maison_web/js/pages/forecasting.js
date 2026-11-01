@@ -143,39 +143,42 @@ const ForecastingPage = {
     return `
       <h1 class="page-title">Sales Forecasting</h1>
 
-    <div class="card" style="margin-bottom:20px;">
-      <div class="card-title" style="margin-bottom:14px;">Forecast Status &amp; Filter</div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
-          <div class="filter-controls-group">
-            ${renderTreeFilter('forecast-brand', {
-              label: 'Brand',
-              items: DB.salesForecasts.map((f) => ({ value: f.brandKey, label: f.brand })),
-              selected: this.selectedBrands,
-              searchPlaceholder: 'Search brand',
-              emptyText: 'No forecast yet.',
-            })}
-            ${renderTreeFilter('forecast-trend', {
-              label: 'Trend',
-              items: [['increasing', 'Increasing'], ['stable', 'Stable'], ['decreasing', 'Decreasing']].map(([v, l]) => ({ value: v, label: l })),
-              selected: this.selectedTrends,
-            })}
-            ${hasForecast ? renderTreeFilter('forecast-months', {
-              label: 'Forecast Period',
-              items: [
-                ...this.monthOptions().map((n) => ({ value: n, label: `Next ${n} Months` })),
-                { value: 'all', label: meta.horizon ? `Next ${meta.horizon} Months` : 'All Months' },
-              ],
-              selected: this.selectedMonths,
-              single: true,
-              defaultValue: 'all',
-            }) : ''}
-            ${this.hasActiveFilter() ? '<button type="button" class="btn-secondary" id="forecast-reset-filters" style="padding:6px 14px; font-size:12.5px;">Reset Filters</button>' : ''}
-          </div>
-          ${this.canRequestForecast() ? `<button class="btn-confirm" id="btn-request-forecast" ${busy ? 'disabled' : ''}>${busy ? 'Forecast in progress…' : 'Request New Forecast'}</button>` : ''}
+    <div class="card forecast-status-card" style="margin-bottom:20px;">
+      <div class="forecast-status-main">
+        <div class="card-title" style="margin-bottom:14px;">Forecast Status &amp; Filter</div>
+        <div class="filter-controls-group">
+          ${renderTreeFilter('forecast-brand', {
+            label: 'Brand',
+            items: DB.salesForecasts.map((f) => ({ value: f.brandKey, label: f.brand })),
+            selected: this.selectedBrands,
+            searchPlaceholder: 'Search brand',
+            emptyText: 'No forecast yet.',
+          })}
+          ${renderTreeFilter('forecast-trend', {
+            label: 'Trend',
+            items: [['increasing', 'Increasing'], ['stable', 'Stable'], ['decreasing', 'Decreasing']].map(([v, l]) => ({ value: v, label: l })),
+            selected: this.selectedTrends,
+          })}
+          ${hasForecast ? renderTreeFilter('forecast-months', {
+            label: 'Forecast Period',
+            items: [
+              ...this.monthOptions().map((n) => ({ value: n, label: `Next ${n} Months` })),
+              { value: 'all', label: meta.horizon ? `Next ${meta.horizon} Months` : 'All Months' },
+            ],
+            selected: this.selectedMonths,
+            single: true,
+            defaultValue: 'all',
+          }) : ''}
+          ${this.hasActiveFilter() ? '<button type="button" class="btn-secondary" id="forecast-reset-filters" style="padding:6px 14px; font-size:12.5px;">Reset Filters</button>' : ''}
         </div>
         <div class="cell-muted" style="margin-top:12px;font-size:12.5px;">${statusLine}${runBadge}</div>
         ${hasForecast ? '' : `<div class="cell-muted" style="margin-top:8px;font-size:12.5px;">Forecasts appear for brands with at least 12 months of sales.</div>`}
       </div>
+      <div class="report-actions stacked">
+        <button type="button" class="btn-secondary report-btn" id="forecast-report" ${hasForecast ? '' : 'disabled'}><i class="fa-solid fa-download"></i> Download Report</button>
+        ${this.canRequestForecast() ? `<button class="btn-confirm" id="btn-request-forecast" ${busy ? 'disabled' : ''}>${busy ? 'Forecast in progress…' : 'Request New Forecast'}</button>` : ''}
+      </div>
+    </div>
 
       <div class="chart-row">
         <div class="chart-card">
@@ -280,7 +283,7 @@ const ForecastingPage = {
       this.alertPage = parseInt(btn.dataset.page, 10);
       Router.rerender();
     });
-    document.getElementById('btn-request-forecast')?.addEventListener('click', () => this.requestForecast());
+    document.getElementById('forecast-report')?.addEventListener('click', () => ReportExport.forecast());
 
     this.drawTrendChart();
 

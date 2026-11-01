@@ -438,7 +438,10 @@ const DashboardPage = {
             emptyText: 'No brands yet.',
           })}
         </div>
-        ${filtered ? '<button type="button" class="btn-secondary" id="dashboard-reset-filters" style="padding:6px 14px; font-size:12.5px;">Reset Filters</button>' : ''}
+        <div class="report-actions">
+          ${filtered ? '<button type="button" class="btn-secondary" id="dashboard-reset-filters" style="padding:6px 14px; font-size:12.5px;">Reset Filters</button>' : ''}
+          <button type="button" class="btn-secondary report-btn" id="dashboard-report"><i class="fa-solid fa-download"></i> Download Report</button>
+        </div>
       </div>
 
       <div class="stat-grid">
@@ -515,6 +518,8 @@ const DashboardPage = {
       this.filterBrands = null;
       Router.rerender();
     });
+
+    document.getElementById('dashboard-report')?.addEventListener('click', () => ReportExport.dashboard());
 
     const stats = this.computeStats();
     DataStore.refreshIfStale();
