@@ -149,6 +149,8 @@ const SettingsPage = {
         </form>
       </div>
 
+      ${ShopifySync.canSee() ? ShopifySync.render() : ''}
+
       ${this.isOwner() ? this.renderTeam() : ''}
     `;
   },
@@ -245,6 +247,7 @@ const SettingsPage = {
 
   // ----------------------------------------------------------------- bind
   afterRender() {
+    ShopifySync.afterRender();
     // Cached data belongs to one user; start fresh if someone else logged in on this computer
     if (this.loadedFor !== Session.currentUser.uid) {
       this.loadedFor = Session.currentUser.uid;

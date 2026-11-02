@@ -261,7 +261,7 @@ Object.assign(ConsignmentFlow, {
       return `
         <tr style="vertical-align:middle;">
           <td class="sl-id"><strong>${escapeHtml(i.code)}</strong><div class="cell-muted" style="font-size:11px;">${escapeHtml(DataStore.formatMDY(s.sold_at))}</div></td>
-          <td class="sl-item"><div style="font-weight:600;">${escapeHtml(this.itemName(i))}</div><div class="cell-muted" style="font-size:11.5px;">Buyer: ${escapeHtml(s.buyer_name)}${s.buyer_phone ? ` · ${escapeHtml(s.buyer_phone)}` : ''} · <strong>${layaway ? `Layaway · ${s.layaway_months} mo` : 'Full payment'}</strong></div></td>
+          <td class="sl-item"><div style="font-weight:600;">${escapeHtml(this.itemName(i))}</div><div class="cell-muted" style="font-size:11.5px;">${s.sale_channel === 'shopify' ? `<strong style="color:var(--card-navy-dark);">Shopify ${escapeHtml(s.shopify_order_name || 'order')}</strong> · ` : ''}Buyer: ${escapeHtml(s.buyer_name)}${s.buyer_phone ? ` · ${escapeHtml(s.buyer_phone)}` : ''} · <strong>${layaway ? `Layaway · ${s.layaway_months} mo` : 'Full payment'}</strong></div></td>
           <td class="sl-due"><strong>${this.peso(s.total_due)}</strong>${Number(s.layaway_interest) ? `<div class="cell-muted" style="font-size:11px;">incl. ${this.peso(s.layaway_interest)} interest</div>` : ''}
             ${layaway ? `<div style="font-size:11px; color:${paid >= Number(s.total_due) ? 'var(--green)' : 'var(--warning-amber)'};">Paid ${this.peso(paid)}</div>` : ''}</td>
           <td class="sl-payout">${this.peso(s.consignor_payout)}${s.payout_due_by && s.payout_status !== 'released' ? `<div class="cell-muted" style="font-size:11px;">due by ${escapeHtml(DataStore.formatMDY(s.payout_due_by + 'T12:00:00'))}</div>` : ''}</td>

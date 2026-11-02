@@ -367,6 +367,7 @@ const DataStore = {
                  sales_transactions(id, buyer_name, buyer_phone, sale_type, layaway_months, sale_price, commission,
                           consignor_payout, layaway_interest, total_due, payment_status, payment_verified_at,
                           payout_status, payout_due_by, payout_released_at, sold_at, sales_associate_id,
+                          sale_channel, shopify_order_name,
                           layaway_payments(amount, paid_at)),
                  item_withdrawals(id, reason, days_since_posting, pull_out_fee, fee_paid, fee_paid_at, status, requested_at, released_at),
                  contract_extensions(extra_days, notes, created_at),
