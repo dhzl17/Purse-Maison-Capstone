@@ -1,0 +1,53 @@
+name: Deploy website to Vercel
+
+# Publishes purse_maison_web (the staff website) to Vercel every time something is pushed to main,
+# whoever made the commit. It uses one Vercel account's token, so the free Hobby plan works for a team.
+#
+# Needs one repository secret: VERCEL_TOKEN (Vercel -> Account Settings -> Tokens).
+# The first run creates the Vercel project "purse-maison" by itself.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "purse_maison_web/**"
+      - ".github/workflows/deploy-vercel.yml"
+  workflow_dispatch:        # adds a "Run workflow" button on GitHub
+
+concurrency:
+  group: deploy-vercel
+  cancel-in-progress: true  # only the newest push is deployed
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install the Vercel CLI
+        run: npm install --global vercel@latest
+
+      # Only the website folder is uploaded, copied outside the Git folder so the deployment belongs to the
+      # token's Vercel account rather than to whoever made the commit.
+      - name: Copy the website
+        run: |
+          mkdir -p "$RUNNER_TEMP/site"
+          cp -r purse_maison_web/. "$RUNNER_TEMP/site/"
+
+      - name: Link the Vercel project
+        working-directory: ${{ runner.temp }}/site
+        run: vercel link --yes --project purse-maison --token "$VERCEL_TOKEN"
+
+      - name: Deploy to production
+        working-directory: ${{ runner.temp }}/site
+        run: |
+          url=$(vercel deploy --prod --yes --token "$VERCEL_TOKEN")
+          echo "Deployed: $url"
+          echo "### Deployed to Vercel: $url" >> "$GITHUB_STEP_SUMMARY"
