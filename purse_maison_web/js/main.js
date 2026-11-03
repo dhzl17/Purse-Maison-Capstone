@@ -133,10 +133,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const sidebar = document.getElementById('sidebar');
   const scrim = document.getElementById('sidebar-scrim');
   menuToggleBtn.addEventListener('click', () => {
-    sidebar.classList.toggle('collapsed');
-    sidebar.classList.toggle('open');
     if (window.innerWidth < 1000) {
-      scrim.classList.toggle('hidden');
+      const opening = !sidebar.classList.contains('open');
+      sidebar.classList.remove('collapsed');
+      sidebar.classList.toggle('open', opening);
+      scrim.classList.toggle('hidden', !opening);
+    } else {
+      sidebar.classList.remove('open');
+      sidebar.classList.toggle('collapsed');
+      scrim.classList.add('hidden');
     }
   });
   scrim.addEventListener('click', closeMobileSidebar);
