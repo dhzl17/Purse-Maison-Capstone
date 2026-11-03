@@ -134,15 +134,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const scrim = document.getElementById('sidebar-scrim');
   menuToggleBtn.addEventListener('click', () => {
     if (window.innerWidth < 1000) {
-      const opening = !sidebar.classList.contains('open');
       sidebar.classList.remove('collapsed');
-      sidebar.classList.toggle('open', opening);
-      scrim.classList.toggle('hidden', !opening);
+      sidebar.classList.toggle('open');
     } else {
       sidebar.classList.remove('open');
       sidebar.classList.toggle('collapsed');
-      scrim.classList.add('hidden');
     }
+    scrim.classList.add('hidden');
   });
   scrim.addEventListener('click', closeMobileSidebar);
 
