@@ -7,8 +7,9 @@ const MONTH_RANGE_PRESETS = [
 ];
 
 const DASHBOARD_RANGE_PRESETS = [
-  ['today', 'Today'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['this_month', 'This month'], ['last_month', 'Last month'],
-  ['3m', 'Last 3 months'], ['6m', 'Last 6 months'], ['12m', 'Last 12 months'], ['this_year', 'This year'], ['all', 'All time'],
+  ['all', 'All time'], ['today', 'Today'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days'],
+  ['this_month', 'This month'], ['last_month', 'Last month'],
+  ['3m', 'Last 3 months'], ['6m', 'Last 6 months'], ['12m', 'Last 12 months'], ['this_year', 'This year'],
 ];
 
 const DR_MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
