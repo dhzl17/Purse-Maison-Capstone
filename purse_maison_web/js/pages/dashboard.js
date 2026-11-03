@@ -36,6 +36,13 @@ const DashboardPage = {
     const r = resolveDateRange(this.filterRange, 'day', DASHBOARD_DEFAULT_RANGE);
     const t = drToday();
     const tomorrow = new Date(t.getFullYear(), t.getMonth(), t.getDate() + 1);
+    if (!r.start) { 
+      const dates = [...(DB.dailySales || []), ...(DB.salesSeries || [])]
+        .map((s) => s.date).filter((d) => d && !Number.isNaN(d.getTime()));
+      const first = dates.length ? new Date(Math.min(...dates)) : new Date(t.getFullYear(), t.getMonth() - 5, 1);
+      r.start = new Date(first.getFullYear(), first.getMonth(), 1);
+      r.end = tomorrow;
+    }
     if (r.end > tomorrow) r.end = tomorrow;
     return r;
   },
@@ -84,7 +91,7 @@ const DashboardPage = {
   /** The period inside a sentence: "the last 30 days", "this month", "the period from 7 October 2026 to 11 October 2026". */
   periodPhrase() {
     const r = this.range();
-    const phrases = { today: 'today', this_month: 'this month', last_month: 'last month', this_year: 'this year' };
+    const phrases = { today: 'today', this_month: 'this month', last_month: 'last month', this_year: 'this year', all: 'all time' };
     if (r.preset) return phrases[r.preset] || `the ${this.periodLabel().toLowerCase()}`;
     const full = (key) => { const d = drParse(key); return `${d.getDate()} ${DR_MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}`; };
     const { from, to } = this.filterRange;

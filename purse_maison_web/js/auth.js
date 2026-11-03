@@ -28,7 +28,7 @@ const ROLES = {
     allowedRoutes: [
       'dashboard',
       'consignment-overview', 'consignment-approval',
-      'inventory', 'settings', 'help', 'consignment-sales'
+      'inventory', 'forecasting', 'settings', 'help', 'consignment-sales'
     ],
     inventoryViewOnly: false,
     forecastingViewOnly: false,
