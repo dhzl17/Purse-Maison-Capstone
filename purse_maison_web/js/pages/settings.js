@@ -18,7 +18,17 @@ const NOTIFICATION_PREFS = [
 ];
 const UI_ROLE_TO_DB_ROLE = Object.fromEntries(Object.entries(DB_ROLE_TO_UI_ROLE).map(([db, ui]) => [ui, db]));
 
-/** Logs out after a period without mouse/keyboard/touch activity (setting stored per staff member). */
+const EYE_ICON = '<svg class="eye-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF_ICON = '<svg class="eye-off-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+function passwordField(inputAttrs) {
+  return `
+    <div class="field-input-wrap">
+      <input class="field-input" type="password" ${inputAttrs} style="padding-right:50px;" />
+      <button type="button" class="field-toggle" data-toggle-password title="Show password" aria-label="Show password">${EYE_ICON}${EYE_OFF_ICON}</button>
+    </div>`;
+}
+
 const IdleLogout = {
   minutes: DEFAULT_AUTO_LOGOUT,
   last: Date.now(),
@@ -104,15 +114,15 @@ const SettingsPage = {
             <div class="cell-muted" style="font-size:12.5px; margin-bottom:14px; font-weight:500;">Change Password</div>
             <div class="field-group">
               <label class="field-label">Current Password</label>
-              <input class="field-input" name="current" type="password" autocomplete="current-password" required />
+              ${passwordField('name="current" autocomplete="current-password" required')}
             </div>
             <div class="field-group">
               <label class="field-label">New Password (at least ${MIN_PASSWORD_LENGTH} characters)</label>
-              <input class="field-input" name="new" type="password" autocomplete="new-password" required minlength="${MIN_PASSWORD_LENGTH}" />
+              ${passwordField(`name="new" autocomplete="new-password" required minlength="${MIN_PASSWORD_LENGTH}"`)}
             </div>
             <div class="field-group">
               <label class="field-label">Confirm New Password</label>
-              <input class="field-input" name="confirm" type="password" autocomplete="new-password" required minlength="${MIN_PASSWORD_LENGTH}" />
+              ${passwordField(`name="confirm" autocomplete="new-password" required minlength="${MIN_PASSWORD_LENGTH}"`)}
             </div>
             <button type="submit" class="btn-confirm" style="margin-top:8px;">Update Password</button>
           </form>
@@ -259,6 +269,18 @@ const SettingsPage = {
     if (this.prefs === null) this.loadPrefs();
     if (this.isOwner() && this.team === null && !this.teamError) this.loadTeam();
 
+    document.querySelectorAll('#password-form [data-toggle-password]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const input = btn.parentElement.querySelector('input');
+        const showing = input.type === 'text';
+        input.type = showing ? 'password' : 'text';
+        btn.querySelector('.eye-icon').style.display = showing ? '' : 'none';
+        btn.querySelector('.eye-off-icon').style.display = showing ? 'none' : '';
+        btn.title = showing ? 'Show password' : 'Hide password';
+        btn.setAttribute('aria-label', btn.title);
+      });
+    });
+
     document.getElementById('account-info-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = e.target.querySelector('button[type="submit"]');
@@ -295,6 +317,9 @@ const SettingsPage = {
         const { error } = await sbClient.auth.updateUser({ password: next });
         if (error) throw error;
         form.reset();
+        form.querySelectorAll('[data-toggle-password]').forEach((b) => {
+          if (b.parentElement.querySelector('input').type === 'text') b.click();
+        });
         showToast('Password updated. Use the new password next time you log in.');
       } catch (err) {
         if (err.message === 'The current password is incorrect.') Validate.show(form, [[field('current'), err.message]]);
