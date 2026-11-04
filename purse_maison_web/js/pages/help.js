@@ -748,6 +748,7 @@ const HelpPage = {
 
   drawTicketLists() {
     const box = document.getElementById('help-ticket-lists');
+    if (box) box.innerHTML = this.ticketListsHtml();
     bindTreeFilter('ticket-filter', (value) => { this.ticketFilter = value; this.drawTicketLists(); });
     if (!box || this.focusTicketId === null || this.tickets === null) return;
     // Open the ticket chosen in the bell. The inbox copy comes last when it is also under My Tickets.
