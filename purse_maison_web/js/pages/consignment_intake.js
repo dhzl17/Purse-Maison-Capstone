@@ -80,7 +80,7 @@ const PHOTO_NAME_HINTS = [
   ['back', ['back', 'rear']],
 ];
 const ACCESSORY_OPTIONS = ['Dust bag', 'Box', 'Lock', 'Keys', 'Strap', 'Receipt'];
-const ITEM_CATEGORIES = ['Handbag', 'Shoulder Bag', 'Tote', 'Crossbody', 'Backpack', 'Clutch', 'Small Leather Goods', 'Wallet', 'Shoes', 'Belt', 'Accessory'];
+const ITEM_CATEGORIES = ['Handbag', 'Shoulder Bag', 'Tote', 'Crossbody', 'Backpack', 'Clutch', 'Travel Bag', 'Small Leather Goods', 'Wallet', 'Shoes', 'Belt', 'Accessory'];
 const FEE_LABELS = {
   'entrupy/standard': 'Entrupy — Standard',
   'entrupy/hermes_premium': 'Entrupy — Hermès premium',
