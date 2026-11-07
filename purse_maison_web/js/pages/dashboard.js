@@ -91,7 +91,8 @@ const DashboardPage = {
   /** The period inside a sentence: "the last 30 days", "this month", "the period from 7 October 2026 to 11 October 2026". */
   periodPhrase() {
     const r = this.range();
-    const phrases = { today: 'today', this_month: 'this month', last_month: 'last month', this_year: 'this year', all: 'all time' };
+        const phrases = { today: 'today', this_month: 'this month', last_month: 'last month', this_year: 'this year', last_year: 'last year', all: 'all time' };
+    if (r.preset && /^y\d{4}$/.test(r.preset)) return r.preset.slice(1);
     if (r.preset) return phrases[r.preset] || `the ${this.periodLabel().toLowerCase()}`;
     const full = (key) => { const d = drParse(key); return `${d.getDate()} ${DR_MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}`; };
     const { from, to } = this.filterRange;
@@ -405,6 +406,44 @@ const DashboardPage = {
     return notes;
   },
 
+  pipelineByStage() {
+    const brandSet = this.filterBrands === null ? null : new Set(this.filterBrands);
+    const items = DB.pipelineItems.filter((i) => brandSet === null || brandSet.has(this.brandKeyOf(i.brand)));
+    const rows = OVERVIEW_STAGE_GROUPS
+      .filter(([key]) => key !== 'closed')
+      .map(([key, label, stages]) => {
+        const live = key === 'live';
+        const keep = live ? ['publish_item'] : stages;
+        return { label: live ? 'Live (Published)' : label, count: items.filter((i) => keep.includes(i.stage)).length };
+      });
+    const total = rows.reduce((sum, r) => sum + r.count, 0);
+    const top = rows.reduce((best, r) => (r.count > best.count ? r : best), rows[0]);
+    const piling = total > 0 && top.label !== 'Live (Published)' && top.count / total >= 0.4;
+        let scope = '';
+    if (this.filterBrands !== null) {
+      const names = this.brandOptions().filter(([k]) => this.filterBrands.includes(k)).map(([, n]) => n);
+      scope = names.length === 1 ? names[0] : names.length === 2 ? `${names[0]} and ${names[1]}` : `the ${names.length} selected brands`;
+    }
+    let note = `No items${scope ? ` for ${scope}` : ''} are in progress right now.`;
+    if (total) {
+      const entries = rows.filter((r) => r.count > 0).sort((a, b) => b.count - a.count);
+      const where = (r) => (r.label === 'Live (Published)'
+        ? `${r.count} ${r.count === 1 ? 'is' : 'are'} live`
+        : `${r.count} ${r.count === 1 ? 'is' : 'are'} at ${r.label}`);
+      const list = entries.map((r) => `${where(r)} (${Math.round((r.count / total) * 100)}%)`);
+      const joined = list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list[0];
+      note = `${scope ? `For ${scope}, o` : 'O'}f the ${total} ${total === 1 ? 'item' : 'items'} currently in consignment, ${joined}.`;
+      const early = rows.filter((r) => r.label !== 'Live (Published)');
+      const prep = early.reduce((sum, r) => sum + r.count, 0);
+      if (prep > 0) {
+        const busiest = early.reduce((best, r) => (r.count > best.count ? r : best), early[0]);
+        note += ` Of these, ${prep} ${prep === 1 ? 'is' : 'are'} still being prepared before listing, with the most at ${busiest.label} (${busiest.count}).`;
+      }
+      if (piling) note += ' Work may be piling up at this stage.';
+    }
+    return { rows, total, note, topLabel: piling ? top.label : '' };
+  },
+
   render() {
     const brands = this.brandOptions();
     if (this.filterBrands !== null) {
@@ -415,6 +454,7 @@ const DashboardPage = {
     const stats = this.computeStats();
     const insights = this.buildInsights(stats);
     const notes = this.chartNotes(stats);
+    const pipeline = this.pipelineByStage();
     const user = Session.currentUser;
     const roleConfig = ROLES[user.role] || ROLES.salesAssociate;
 
@@ -509,6 +549,14 @@ const DashboardPage = {
           </div>
         </div>
       </div>
+
+      <div class="chart-row" style="margin-top:20px;">
+        <div class="chart-card">
+          <div class="chart-card-title"><span>Consignment Workflow Status</span><span class="period-chip">Right now${this.filterBrands !== null ? ' · Selected brands' : ''}</span></div>
+          <div class="chart-canvas-wrap" style="height:${Math.max(200, pipeline.rows.length * 40 + 30)}px;"><canvas id="chart-pipeline"></canvas></div>
+          <p class="chart-insight">${escapeHtml(pipeline.note)}</p>
+        </div>
+      </div>
     `;
   },
     afterRender() {
@@ -552,5 +600,12 @@ const DashboardPage = {
         label, data: stats.interactions[field], backgroundColor: color, borderRadius: 2, maxBarThickness: 36,
       })),
       { stacked: true });
+
+    const pipeline = this.pipelineByStage();
+    makeHorizontalBarChart('chart-pipeline',
+      pipeline.rows.map((r) => `${r.label} (${r.count})`),
+      pipeline.rows.map((r) => r.count),
+      pipeline.rows.map((r) => (r.label === pipeline.topLabel ? '#C9A24A' : '#10184F')),
+      { signed: false });
   },
 };

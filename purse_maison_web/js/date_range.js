@@ -1,20 +1,27 @@
 const DAY_RANGE_PRESETS = [
-  ['all', 'All time'], ['today', 'Today'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days'],
-  ['this_month', 'This month'], ['last_month', 'Last month'], ['this_year', 'This year'],
+  ['all', 'All time'], ['today', 'Today'],
+  ['this_month', 'This month'], ['last_month', 'Last month'],
+  ['this_year', 'This year'], ['last_year', 'Last year'],
 ];
 const MONTH_RANGE_PRESETS = [
   ['1m', 'This month'], ['3m', 'Last 3 months'], ['6m', 'Last 6 months'], ['12m', 'Last 12 months'], ['ytd', 'This year'],
 ];
 
 const DASHBOARD_RANGE_PRESETS = [
-  ['all', 'All time'], ['today', 'Today'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days'],
+  ['all', 'All time'], ['today', 'Today'],
   ['this_month', 'This month'], ['last_month', 'Last month'],
-  ['3m', 'Last 3 months'], ['6m', 'Last 6 months'], ['12m', 'Last 12 months'], ['this_year', 'This year'],
+  ['3m', 'Last 3 months'], ['6m', 'Last 6 months'], ['12m', 'Last 12 months'],
+  ['this_year', 'This year'], ['last_year', 'Last year'],
 ];
 
 const DR_MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DR_WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
-const DR_MAX_MONTHS = 24; // longest custom month range (keeps the monthly charts readable)
+const DR_MAX_MONTHS = 24; 
+const DR_YEAR_COUNT = 3; 
+const drYearPresets = () => {
+  const y = new Date().getFullYear();
+  return Array.from({ length: DR_YEAR_COUNT }, (_, i) => [`y${y - 1 - i}`, String(y - 1 - i)]);
+};
 
 const drPad = (n) => String(n).padStart(2, '0');
 const drDayKey = (d) => `${d.getFullYear()}-${drPad(d.getMonth() + 1)}-${drPad(d.getDate())}`;
@@ -39,6 +46,11 @@ function resolveDateRange(value, mode, defaultPreset) {
     return { start, end, preset: null };
   }
   const p = v.preset || defaultPreset;
+  const yearMatch = /^y(\d{4})$/.exec(p);
+  if (yearMatch) {
+    const yr = Number(yearMatch[1]);
+    return { start: new Date(yr, 0, 1), end: new Date(yr + 1, 0, 1), preset: p };
+  }
   const nextMonth = new Date(y, m + 1, 1);
   const ranges = {
     all: [null, null],
@@ -48,6 +60,7 @@ function resolveDateRange(value, mode, defaultPreset) {
     this_month: [new Date(y, m, 1), nextMonth],
     last_month: [new Date(y, m - 1, 1), new Date(y, m, 1)],
     this_year: [new Date(y, 0, 1), new Date(y + 1, 0, 1)],
+    last_year: [new Date(y - 1, 0, 1), new Date(y, 0, 1)],
     '1m': [new Date(y, m, 1), nextMonth],
     '3m': [new Date(y, m - 2, 1), nextMonth],
     '6m': [new Date(y, m - 5, 1), nextMonth],
@@ -86,6 +99,7 @@ function dateRangeLabel(value, mode, defaultPreset) {
   const presets = [...DAY_RANGE_PRESETS, ...DASHBOARD_RANGE_PRESETS, ...MONTH_RANGE_PRESETS];
   if (!value || !value.from) {
     const key = (value && value.preset) || defaultPreset;
+    if (/^y\d{4}$/.test(key)) return key.slice(1);
     const found = presets.find(([k]) => k === key);
     return found ? found[1] : '';
   }
@@ -138,11 +152,15 @@ function renderDateRangeFilter(id, { label, value = null, mode = 'day', defaultP
           </div>
           <div class="date-range-nav">
             <button type="button" class="date-range-step" data-dr-step="-1" aria-label="Previous">‹</button>
-            <span class="date-range-title"></span>
+            <span class="date-range-title">
+              ${mode === 'month' ? '' : '<select class="date-range-select" data-dr-month aria-label="Month"></select>'}
+              <select class="date-range-select" data-dr-year aria-label="Year"></select>
+            </span>
             <button type="button" class="date-range-step" data-dr-step="1" aria-label="Next">›</button>
           </div>
           <div class="date-range-grid ${mode === 'month' ? 'is-months' : 'is-days'}"></div>
           <p class="date-range-hint"></p>
+          <button type="button" class="date-range-wholeyear" data-dr-wholeyear></button>
           <div class="tree-filter-footer">
             <button type="button" class="tree-filter-clear" data-dr-cancel>Cancel</button>
             <button type="button" class="tree-filter-apply" data-dr-apply disabled>Apply</button>
@@ -184,17 +202,31 @@ function bindDateRangeFilter(id, onApply) {
     return (y.getFullYear() - x.getFullYear()) * 12 + (y.getMonth() - x.getMonth()) + 1;
   };
 
-  // Calendar cells (rebuilt only when the month/year changes; clicks just repaint the classes)
+    const monthSel = root.querySelector('[data-dr-month]');
+  const yearSel = root.querySelector('[data-dr-year]');
+  const wholeBtn = root.querySelector('[data-dr-wholeyear]');
+  const lastYear = drToday().getFullYear();
+  const firstYear = minKey ? Number(minKey.slice(0, 4)) : lastYear - 10;
+  if (monthSel) monthSel.innerHTML = DR_MONTHS_FULL.map((n, i) => `<option value="${i}">${n}</option>`).join('');
+  yearSel.innerHTML = Array.from({ length: lastYear - firstYear + 1 }, (_, i) => lastYear - i)
+    .map((yr) => `<option value="${yr}">${yr}</option>`).join('');
+  const syncPickers = () => {
+    if (monthSel) monthSel.value = String(view.getMonth());
+    yearSel.value = String(view.getFullYear());
+    wholeBtn.textContent = `Show all of ${view.getFullYear()}`;
+    wholeBtn.disabled = !!minKey && `${view.getFullYear()}-12-31`.slice(0, isMonth ? 7 : 10) < minKey;
+  };
+
   const build = () => {
     if (isMonth) {
-      title.textContent = String(view.getFullYear());
+      syncPickers();
       grid.innerHTML = MONTH_ABBREV.map((m, i) => {
         const key = drMonthKey(new Date(view.getFullYear(), i, 1));
         const off = key > maxKey || (minKey && key < minKey);
         return `<button type="button" class="date-range-cell" data-dr-key="${key}" ${off ? 'disabled' : ''}>${m}</button>`;
       }).join('');
     } else {
-      title.textContent = `${DR_MONTHS_FULL[view.getMonth()]} ${view.getFullYear()}`;
+      syncPickers();
       const first = new Date(view.getFullYear(), view.getMonth(), 1);
       const lead = (first.getDay() + 6) % 7; // weeks start on Monday
       const cells = [];
@@ -276,6 +308,10 @@ function bindDateRangeFilter(id, onApply) {
     if (preset) { close(); onApply({ preset: preset.dataset.drPreset }); return; }
     if (e.target.closest('[data-dr-custom]')) { if (custom.hidden) openCustom(); else closeCustom(); return; }
     if (e.target.closest('[data-dr-close]') || e.target.closest('[data-dr-cancel]')) { closeCustom(); return; }
+    if (e.target.closest('[data-dr-wholeyear]')) {
+      if (!wholeBtn.disabled) { const yr = view.getFullYear(); close(); onApply({ preset: `y${yr}` }); }
+      return;
+    }
     const step = e.target.closest('[data-dr-step]');
     if (step) {
       const n = Number(step.dataset.drStep);
@@ -296,6 +332,13 @@ function bindDateRangeFilter(id, onApply) {
       close();
       onApply({ from: x, to: y });
     }
+  });
+
+  root.addEventListener('change', (e) => {
+    if (!e.target.matches('[data-dr-year], [data-dr-month]')) return;
+    const mo = monthSel ? Number(monthSel.value) : 0;
+    view = new Date(Number(yearSel.value), isMonth ? 0 : mo, 1);
+    build();
   });
 
   grid.addEventListener('mouseover', (e) => {
