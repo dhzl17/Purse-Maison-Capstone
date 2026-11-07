@@ -808,6 +808,8 @@ const ConsignmentFlow = {
             <div class="field-group col-wide">
               <label class="field-label">Consignor Name</label>
               <input class="field-input" name="consignor" list="cons-consignor-list" required placeholder="e.g. Maria Santos" autocomplete="off">
+              <input type="hidden" name="consignor_id" value="">
+              <div id="cons-match-box" style="display:none;"></div>
             </div>
             <div class="field-group col-wide">
               <label class="field-label">Source Channel</label>
@@ -927,7 +929,7 @@ const ConsignmentFlow = {
     this.bindQueueSelect('preintake');
 
     const form = document.getElementById('cons-inquiry-form');
-    if (form) form.addEventListener('submit', (e) => { e.preventDefault(); this.createInquiry(form); });
+    if (form) this.bindClientMatch(form);
 
     const i = this.item(this.selected.preintake);
     if (!i) return;
@@ -991,6 +993,91 @@ const ConsignmentFlow = {
     });
   },
 
+  bindClientMatch(form) {
+    const nameEl = form.querySelector('[name="consignor"]');
+    const phoneEl = form.querySelector('[name="phone"]');
+    const emailEl = form.querySelector('[name="email"]');
+    const idEl = form.querySelector('[name="consignor_id"]');
+    const box = document.getElementById('cons-match-box');
+    if (!nameEl || !phoneEl || !emailEl || !idEl || !box) return;
+
+    const norm = (s) => String(s || '').replace(/\s+/g, '').toLowerCase();
+    const boxStyle = 'border:1px solid #E2E8F0; border-radius:8px; padding:10px; margin-top:6px; font-size:12.5px; background:#F8FAFC;';
+    const hide = () => { box.style.display = 'none'; box.innerHTML = ''; };
+    const show = (html) => { box.innerHTML = html; box.style.display = 'block'; };
+    const lockFields = (locked) => {
+      [nameEl, phoneEl, emailEl].forEach((el) => { el.readOnly = locked; el.style.opacity = locked ? '0.6' : ''; });
+    };
+
+    const matches = () => {
+      const n = norm(nameEl.value);
+      const p = norm(Validate.normalizePhone(phoneEl.value));
+      const e = norm(emailEl.value);
+      return DB.consignorList.filter((c) =>
+        (n.length >= 3 && norm(c.full_name).includes(n)) ||
+        (p.length >= 7 && norm(c.phone) === p) ||
+        (e && norm(c.email) === e)).slice(0, 5);
+    };
+
+    const selectClient = (c) => {
+      idEl.value = c.id;
+      form.dataset.clientMode = 'existing';
+      nameEl.value = c.full_name;
+      phoneEl.value = c.phone || '';
+      emailEl.value = c.email || '';
+      lockFields(true);
+      const count = DB.pipelineItems.filter((it) => it.consignor && it.consignor.id === c.id).length;
+      show(`<div style="${boxStyle}">
+        <div style="font-weight:600;">Existing client selected</div>
+        <div style="margin:4px 0 8px;">${escapeHtml(this.consignorOption(c))} · ${count} previous item${count === 1 ? '' : 's'}.
+          A new item with its own Item ID will be added under this client. Earlier items are not changed.</div>
+        <button type="button" class="btn-secondary" data-change-client>Change client</button></div>`);
+    };
+
+    const suggest = () => {
+      if (form.dataset.clientMode === 'existing' || form.dataset.clientMode === 'new') return;
+      const found = matches();
+      if (!found.length) return hide();
+      show(`<div style="${boxStyle}">
+        <div style="font-weight:600; margin-bottom:6px;">Existing client found. Is this the same person?</div>
+        ${found.map((c) => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:4px 0;">
+          <span>${escapeHtml(this.consignorOption(c))}</span>
+          <button type="button" class="btn-secondary" data-pick-client="${escapeHtml(c.id)}">Select Existing Client</button></div>`).join('')}
+        <div style="margin-top:6px;"><button type="button" class="btn-secondary" data-new-client>Register New Client</button></div></div>`);
+    };
+
+    nameEl.addEventListener('input', () => {
+      const exact = DB.consignorList.find((c) => this.consignorOption(c) === nameEl.value);
+      if (exact) return selectClient(exact);
+      if (form.dataset.clientMode === 'new') form.dataset.clientMode = '';
+      suggest();
+    });
+    [phoneEl, emailEl].forEach((el) => el.addEventListener('input', suggest));
+
+    box.addEventListener('click', (ev) => {
+      const pick = ev.target.closest('[data-pick-client]');
+      if (pick) {
+        const c = DB.consignorList.find((x) => x.id === pick.dataset.pickClient);
+        if (c) selectClient(c);
+        return;
+      }
+      if (ev.target.closest('[data-new-client]')) {
+        form.dataset.clientMode = 'new';
+        hide();
+        showToast('Registering a new client. A separate profile will be created.');
+        return;
+      }
+      if (ev.target.closest('[data-change-client]')) {
+        idEl.value = '';
+        form.dataset.clientMode = '';
+        lockFields(false);
+        nameEl.value = ''; phoneEl.value = ''; emailEl.value = '';
+        hide();
+        nameEl.focus();
+      }
+    });
+  },
+
   async createInquiry(form) {
     const fd = new FormData(form);
     const text = (k) => String(fd.get(k) || '').trim();
@@ -1000,8 +1087,11 @@ const ConsignmentFlow = {
     const email = text('email').toLowerCase();
     const field = (name) => form.querySelector(`[name="${name}"]`);
 
-    // Existing consignor picked from the list?
-    let consignor = DB.consignorList.find((c) => this.consignorOption(c) === consignorText);
+    const pickedId = text('consignor_id');
+    const registerNew = form.dataset.clientMode === 'new';
+    let consignor = (pickedId && DB.consignorList.find((c) => c.id === pickedId))
+      || DB.consignorList.find((c) => this.consignorOption(c) === consignorText);
+    const returning = !!consignor;
     if (Validate.show(form, [
       [field('consignor'), consignor ? null : Validate.personName(consignorText, 'Consignor name')],
       [field('phone'), consignor ? null : Validate.phone(phone)],
@@ -1012,12 +1102,18 @@ const ConsignmentFlow = {
       [field('notes'), Validate.notes(text('notes'), 'Internal notes')],
     ])) return;
     if (!consignor) {
-      // Duplicate detection for new consignors: same phone, email, or exact name
       const norm = (s) => String(s || '').replace(/\s+/g, '').toLowerCase();
-      const dup = DB.consignorList.find((c) =>
-        (phone && norm(c.phone) === norm(phone)) || (email && norm(c.email) === norm(email)) || norm(c.full_name) === norm(consignorText));
-      if (dup) {
-        Validate.show(form, [[field('consignor'), `Possible duplicate: "${this.consignorOption(dup)}" already exists. Pick them from the consignor list instead.`]]);
+      const byPhone = phone && DB.consignorList.find((c) => norm(c.phone) === norm(phone));
+      const byEmail = email && DB.consignorList.find((c) => norm(c.email) === norm(email));
+      if (byPhone || byEmail) {
+        const dup = byPhone || byEmail;
+        Validate.show(form, [[field(byPhone ? 'phone' : 'email'), `This ${byPhone ? 'phone number' : 'email'} already belongs to "${dup.full_name}". Use Select Existing Client instead.`]]);
+        return;
+      }
+      const sameName = DB.consignorList.some((c) => norm(c.full_name) === norm(consignorText));
+      if (sameName && !registerNew) {
+        showToast('A client with this name already exists. Choose Select Existing Client or Register New Client.');
+        field('consignor').dispatchEvent(new Event('input', { bubbles: true }));
         return;
       }
     }
@@ -1046,7 +1142,7 @@ const ConsignmentFlow = {
       newCode = data.item_code;
       this.selected.preintake = data.id;
     });
-    if (ok) showToast(`Inquiry ${newCode} created. Set its lead status when you have qualified it.`);
+    if (ok) showToast(`Inquiry ${newCode} created${returning ? ' under the existing client' : ''}. Set its lead status when you have qualified it.`);
   },
 
   // =========================================================== INTAKE (7-9)
