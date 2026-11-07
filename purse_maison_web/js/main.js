@@ -160,6 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
     Router.navigate(targetRoute);
     TicketBell.start();
     showToast(`Welcome back, ${Session.currentUser.fullName || Session.currentUser.username}!`);
+    LoginAlerts.show();
   }
   Session.restore().then((restored) => { if (restored) enterApp(); });
 });

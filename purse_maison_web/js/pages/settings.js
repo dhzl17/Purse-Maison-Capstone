@@ -12,9 +12,8 @@ const MIN_PASSWORD_LENGTH = 12;
 const AUTO_LOGOUT_CHOICES = [[0, 'Never'], [15, 'After 15 minutes'], [30, 'After 30 minutes'], [60, 'After 1 hour']];
 const DEFAULT_AUTO_LOGOUT = 30;
 const NOTIFICATION_PREFS = [
-  ['notify_sales', 'Sales Updates', 'Notifications about sales performance and reports.'],
-  ['notify_inventory', 'Inventory Alerts', 'Alerts about inventory changes and expiring contracts.'],
-  ['notify_system', 'System Announcements', 'Important system announcements and updates.'],
+  ['notify_sales', 'Sales Updates', 'When you open the system, shows how many new verified sales were recorded since your last visit.'],
+  ['notify_inventory', 'Inventory Alerts', 'When you open the system, warns you about live listings that are ending soon or expired on their contract.'],
 ];
 const UI_ROLE_TO_DB_ROLE = Object.fromEntries(Object.entries(DB_ROLE_TO_UI_ROLE).map(([db, ui]) => [ui, db]));
 
@@ -65,6 +64,76 @@ const IdleLogout = {
   },
 };
 IdleLogout.start();
+
+const LoginAlerts = {
+  async show() {
+    const u = Session.currentUser;
+    if (!u) return;
+    let prefs = {};
+    try {
+      const { data } = await sbClient.from('profiles').select('preferences').eq('id', u.uid).maybeSingle();
+      prefs = (data && data.preferences) || {};
+    } catch (err) { console.error(err); }
+
+    const alerts = [];
+
+    if (prefs.notify_inventory !== false && Session.canAccess('inventory') && ConsignmentFlow.canManageContract()) {
+      let ending = 0;
+      let expired = 0;
+      DB.pipelineItems.forEach((i) => {
+        if (!i.listing || i.listing.inventory_status !== 'published' || i.sale || i.withdrawal) return;
+        const c = ConsignmentFlow.contractInfo(i);
+        if (!c) return;
+        if (c.left <= 0) expired += 1;
+        else if (c.left <= 7) ending += 1;
+      });
+      const route = Session.canAccess('consignment-sales') ? 'consignment-sales' : 'inventory';
+      const plural = (n) => `listing${n === 1 ? '' : 's'}`;
+      if (ending) {
+        alerts.push({ label: 'Ending soon', text: `${ending} live ${plural(ending)} ${ending === 1 ? 'has' : 'have'} 7 days or fewer left on the contract.`, route, sticky: true });
+      }
+      if (expired) {
+        alerts.push({ label: 'Expired', text: `${expired} live ${plural(expired)} ${expired === 1 ? 'has' : 'have'} passed the contract period.`, route, sticky: true });
+      }
+      if (ending || expired) {
+        const parts = [];
+        if (ending) parts.push(`${ending} ending soon`);
+        if (expired) parts.push(`${expired} expired`);
+        showToast(`Inventory alert: ${parts.join(', ')}.`);
+      }
+    }
+
+    if (prefs.notify_sales !== false && Session.canAccess('dashboard')) {
+      const key = `purseMaisonLastSalesCheck:${u.uid}`;
+      let last = null;
+      try { last = localStorage.getItem(key); } catch (_) { /* storage blocked */ }
+      const since = last ? new Date(last) : null;
+      if (since && !Number.isNaN(since.getTime())) {
+        const fresh = DB.salesTransactions.filter((s) => s.date > since).length;
+        if (fresh) {
+          const text = `${fresh} new verified sale${fresh === 1 ? '' : 's'} since your last visit.`;
+          const canSales = Session.canAccess('consignment-sales');
+          alerts.push({
+            label: 'Sales update',
+            text,
+            route: canSales ? 'consignment-sales' : 'dashboard',
+            onOpen: canSales ? () => {
+              ConsignmentFlow.salesTab = 'sales';
+              ConsignmentFlow.saleStatuses = null;
+              ConsignmentFlow.salesRange = null;
+              ConsignmentFlow.salesPage.sales = 1;
+              ConsignmentFlow.salesPage.done = 1;
+            } : null,
+          });
+          showToast(`Sales update: ${text}`);
+        }
+      }
+      try { localStorage.setItem(key, new Date().toISOString()); } catch (_) { /* storage blocked */ }
+    }
+
+    TicketBell.setAlerts(alerts);
+  },
+};
 
 const SettingsPage = {
   prefs: null,         // this user's saved preferences (loaded on first visit)

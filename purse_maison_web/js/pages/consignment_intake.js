@@ -929,6 +929,7 @@ const ConsignmentFlow = {
     this.bindQueueSelect('preintake');
 
     const form = document.getElementById('cons-inquiry-form');
+    if (form) form.addEventListener('submit', (e) => { e.preventDefault(); this.createInquiry(form); });
     if (form) this.bindClientMatch(form);
 
     const i = this.item(this.selected.preintake);
@@ -1026,24 +1027,22 @@ const ConsignmentFlow = {
       phoneEl.value = c.phone || '';
       emailEl.value = c.email || '';
       lockFields(true);
-      const count = DB.pipelineItems.filter((it) => it.consignor && it.consignor.id === c.id).length;
-      show(`<div style="${boxStyle}">
-        <div style="font-weight:600;">Existing client selected</div>
-        <div style="margin:4px 0 8px;">${escapeHtml(this.consignorOption(c))} · ${count} previous item${count === 1 ? '' : 's'}.
-          A new item with its own Item ID will be added under this client. Earlier items are not changed.</div>
-        <button type="button" class="btn-secondary" data-change-client>Change client</button></div>`);
+      Validate.unmark(nameEl);
+      show(`<div style="${boxStyle} display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <span style="font-weight:600;">Existing client selected</span>
+        <button type="button" class="client-match-btn pick" data-change-client>Change</button>
+      </div>`);
     };
 
     const suggest = () => {
       if (form.dataset.clientMode === 'existing' || form.dataset.clientMode === 'new') return;
       const found = matches();
       if (!found.length) return hide();
-      show(`<div style="${boxStyle}">
-        <div style="font-weight:600; margin-bottom:6px;">Existing client found. Is this the same person?</div>
-        ${found.map((c) => `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:4px 0;">
-          <span>${escapeHtml(this.consignorOption(c))}</span>
-          <button type="button" class="btn-secondary" data-pick-client="${escapeHtml(c.id)}">Select Existing Client</button></div>`).join('')}
-        <div style="margin-top:6px;"><button type="button" class="btn-secondary" data-new-client>Register New Client</button></div></div>`);
+      const label = (c) => (found.length === 1 ? 'Select Existing Client' : `Select ${c.full_name}${c.phone ? ` · ${c.phone}` : ''}`);
+      show(`<div class="client-match-actions">
+        ${found.map((c) => `<button type="button" class="client-match-btn pick" title="${escapeHtml(this.consignorOption(c))}" data-pick-client="${escapeHtml(c.id)}">${escapeHtml(label(c))}</button>`).join('')}
+        <button type="button" class="client-match-btn alt" data-new-client>Register New Client</button>
+      </div>`);
     };
 
     nameEl.addEventListener('input', () => {
@@ -1063,6 +1062,7 @@ const ConsignmentFlow = {
       }
       if (ev.target.closest('[data-new-client]')) {
         form.dataset.clientMode = 'new';
+        Validate.unmark(nameEl);
         hide();
         showToast('Registering a new client. A separate profile will be created.');
         return;
@@ -1103,17 +1103,16 @@ const ConsignmentFlow = {
     ])) return;
     if (!consignor) {
       const norm = (s) => String(s || '').replace(/\s+/g, '').toLowerCase();
+      const sameName = DB.consignorList.some((c) => norm(c.full_name) === norm(consignorText));
+      if (sameName && !registerNew) {
+        Validate.show(form, [[field('consignor'), 'A client with this name already exists. Choose Select Existing Client or Register New Client below.']]);
+        return;
+      }
       const byPhone = phone && DB.consignorList.find((c) => norm(c.phone) === norm(phone));
       const byEmail = email && DB.consignorList.find((c) => norm(c.email) === norm(email));
       if (byPhone || byEmail) {
         const dup = byPhone || byEmail;
         Validate.show(form, [[field(byPhone ? 'phone' : 'email'), `This ${byPhone ? 'phone number' : 'email'} already belongs to "${dup.full_name}". Use Select Existing Client instead.`]]);
-        return;
-      }
-      const sameName = DB.consignorList.some((c) => norm(c.full_name) === norm(consignorText));
-      if (sameName && !registerNew) {
-        showToast('A client with this name already exists. Choose Select Existing Client or Register New Client.');
-        field('consignor').dispatchEvent(new Event('input', { bubbles: true }));
         return;
       }
     }

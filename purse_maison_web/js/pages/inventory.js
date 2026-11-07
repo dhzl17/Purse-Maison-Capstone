@@ -11,6 +11,7 @@ const InventoryPage = {
   sortBy: 'recently',
   filterRange: null,   
   filterBrands: null,
+  filterStatuses: null,
 
   statusBadge(status) {
     const map = {
@@ -72,6 +73,11 @@ const InventoryPage = {
       list = list.filter(i => brands.has(i.brand));
     }
 
+    if (this.filterStatuses !== null) {
+      const statuses = new Set(this.filterStatuses);
+      list = list.filter(i => statuses.has(i.status));
+    }
+
     if (this.searchKeyword) {
       const kw = this.searchKeyword.toLowerCase();
       list = list.filter(i =>
@@ -128,6 +134,13 @@ const InventoryPage = {
             selected: this.filterBrands,
             searchPlaceholder: 'Search brand',
             emptyText: 'No brands yet.',
+          })}
+          ${renderTreeFilter('inventory-status-filter', {
+            label: 'Status',
+            items: [['available', 'Available'], ['reserved', 'Reserved'], ['sold', 'Sold'], ['rejected', 'Rejected']]
+              .map(([value, label]) => ({ value, label })),
+            selected: this.filterStatuses,
+            search: false,
           })}
           ${renderTreeFilter('inventory-sort', {
             label: 'Sort',
@@ -234,6 +247,12 @@ const InventoryPage = {
 
     bindTreeFilter('inventory-brand-filter', (brands) => {
       this.filterBrands = brands;
+      this.currentPage = 1;
+      Router.rerender();
+    });
+
+    bindTreeFilter('inventory-status-filter', (statuses) => {
+      this.filterStatuses = statuses;
       this.currentPage = 1;
       Router.rerender();
     });

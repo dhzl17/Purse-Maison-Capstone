@@ -838,6 +838,22 @@ table.data-table tbody tr.filler-row td { border: 0 !important; padding: 0 !impo
 .btn-danger { border-color: var(--danger-red); color: var(--danger-red); }
 .btn-danger:hover:not(:disabled) { background: var(--danger-red); color: #fff; }
 
+.client-match-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.client-match-btn {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .15s;
+}
+.client-match-btn.pick { background: color-mix(in srgb, var(--card-navy-dark) 12%, transparent); color: var(--card-navy-dark); }
+.client-match-btn.pick:hover { background: color-mix(in srgb, var(--card-navy-dark) 20%, transparent); }
+.client-match-btn.alt { background: rgba(15, 23, 42, .06); color: var(--text-dark); }
+.client-match-btn.alt:hover { background: rgba(15, 23, 42, .12); }
+
 .sales-tab {
   padding: 8px 16px;
   border-radius: 10px;

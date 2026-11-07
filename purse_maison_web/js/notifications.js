@@ -1,23 +1,34 @@
 /**
- * Ticket notifications (bell in the top bar), shown to the Super Admin only.
- * Counts support tickets that are not resolved yet (New + In Progress) and lists the latest ones.
- * Uses the same support_tickets table and Row Level Security as Help Center → Submit a Ticket.
- * The count refreshes every 30 seconds, when the browser tab becomes active again,
+ * Notification bell (top bar), shown to every signed-in user.
+ *   Alerts:  the inventory and sales notices chosen in Settings → Notification Settings (set by LoginAlerts).
+ *   Tickets: Super Admin only. Counts support tickets that are not resolved yet (New + In Progress)
+ *            and lists the latest ones, using the same support_tickets table and Row Level Security
+ *            as Help Center → Submit a Ticket.
+ * The ticket count refreshes every 30 seconds, when the browser tab becomes active again,
  * and right after a ticket is submitted or updated in this browser.
  */
 
 const TicketBell = {
   REFRESH_MS: 30000,
   LIST_LIMIT: 10,
-  tickets: [],   
-  count: 0,       
+  tickets: [],
+  alerts: [],
+  count: 0,
   lastId: null,
-  timer: null, 
+  timer: null,
   loading: false,
   bound: false,
 
   enabled() {
+    return !!Session.currentUser;
+  },
+
+  isOwner() {
     return !!Session.currentUser && Session.currentUser.role === 'superAdmin';
+  },
+
+  total() {
+    return this.alerts.length + (this.isOwner() ? this.count : 0);
   },
 
   start() {
@@ -26,13 +37,26 @@ const TicketBell = {
     root.hidden = !this.enabled();
     if (!this.enabled()) return;
     this.bind();
-    this.refresh();
+    this.alerts = [];
+    this.tickets = [];
+    this.count = 0;
+    this.lastId = null;
+    this.draw();
     clearInterval(this.timer);
-    this.timer = setInterval(() => { if (!document.hidden) this.refresh(); }, this.REFRESH_MS);
+    if (this.isOwner()) {
+      this.refresh();
+      this.timer = setInterval(() => { if (!document.hidden) this.refresh(); }, this.REFRESH_MS);
+    }
+  },
+
+  /** Called by LoginAlerts with the notices for this user: [{ label, text, route }]. */
+  setAlerts(list) {
+    this.alerts = list || [];
+    this.draw();
   },
 
   async refresh() {
-    if (!this.enabled() || this.loading) return;
+    if (!this.isOwner() || this.loading) return;
     this.loading = true;
     try {
       const { data, error, count } = await sbClient.from('support_tickets')
@@ -64,14 +88,30 @@ const TicketBell = {
     const badgeEl = document.getElementById('ticket-bell-count');
     const button = document.getElementById('ticket-bell-btn');
     if (!badgeEl || !button) return;
-    badgeEl.textContent = this.count > 99 ? '99+' : String(this.count);
-    badgeEl.hidden = this.count === 0;
-    button.setAttribute('aria-label', `Ticket notifications: ${this.count} unresolved`);
+    const total = this.total();
+    badgeEl.textContent = total > 99 ? '99+' : String(total);
+    badgeEl.hidden = total === 0;
+    button.setAttribute('aria-label', `Notifications: ${total} to review`);
     const panel = document.getElementById('ticket-bell-panel');
     if (panel && !panel.hidden) panel.innerHTML = this.panelHtml();
   },
 
-  panelHtml() {
+  alertsHtml() {
+    if (!this.alerts.length) return '';
+    const items = this.alerts.map((a, idx) => `
+      <li>
+        <button type="button" class="notif-item" data-bell-alert="${escapeHtml(a.route)}" data-bell-index="${idx}">
+          <span class="notif-item-top"><span class="help-ticket-code">${escapeHtml(a.label)}</span></span>
+          <span class="notif-item-subject" style="white-space:normal;">${escapeHtml(a.text)}</span>
+        </button>
+      </li>`).join('');
+    return `
+      <div class="notif-sub" style="padding:8px 14px 0;">Alerts</div>
+      <ul class="notif-list">${items}</ul>`;
+  },
+
+  ticketsHtml() {
+    if (!this.isOwner()) return '';
     const items = this.tickets.map((t) => `
       <li>
         <button type="button" class="notif-item" data-bell-ticket="${t.id}" data-bell-status="${escapeHtml(t.status)}">
@@ -84,14 +124,22 @@ const TicketBell = {
         </button>
       </li>`).join('');
     return `
-      <div class="notif-head">
-        <span class="notif-title">Ticket Notifications</span>
-        <span class="notif-sub">${this.count} unresolved</span>
-      </div>
+      <div class="notif-sub" style="padding:8px 14px 0;">Tickets · ${this.count} unresolved</div>
       ${items ? `<ul class="notif-list">${items}</ul>` : '<p class="notif-empty">No unresolved tickets.</p>'}
       <div class="notif-foot">
         <button type="button" class="help-link" data-bell-all>View all tickets</button>
       </div>`;
+  },
+
+  panelHtml() {
+    const total = this.total();
+    const body = this.alertsHtml() + this.ticketsHtml();
+    return `
+      <div class="notif-head">
+        <span class="notif-title">Notifications</span>
+        <span class="notif-sub">${total} to review</span>
+      </div>
+      ${body || '<p class="notif-empty">You are all caught up.</p>'}`;
   },
 
   open() {
@@ -119,6 +167,17 @@ const TicketBell = {
       if (panel.hidden) this.open(); else this.close();
     });
     panel.addEventListener('click', (e) => {
+      const alertItem = e.target.closest('[data-bell-alert]');
+      if (alertItem) {
+        const idx = Number(alertItem.dataset.bellIndex);
+        const picked = this.alerts[idx];
+        if (picked && typeof picked.onOpen === 'function') picked.onOpen();
+        if (picked && !picked.sticky) this.alerts.splice(idx, 1);
+        this.close();
+        this.draw();
+        Router.navigate(alertItem.dataset.bellAlert);
+        return;
+      }
       const item = e.target.closest('[data-bell-ticket]');
       if (item) {
         this.close();
