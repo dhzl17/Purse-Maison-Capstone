@@ -90,10 +90,10 @@ const LoginAlerts = {
       const route = Session.canAccess('consignment-sales') ? 'consignment-sales' : 'inventory';
       const plural = (n) => `listing${n === 1 ? '' : 's'}`;
       if (ending) {
-        alerts.push({ label: 'Ending soon', text: `${ending} live ${plural(ending)} ${ending === 1 ? 'has' : 'have'} 7 days or fewer left on the contract.`, route, sticky: true });
+        alerts.push({ label: 'Ending soon', text: `${ending} live ${plural(ending)} ${ending === 1 ? 'has' : 'have'} 7 days or fewer left on the contract.`, route });
       }
       if (expired) {
-        alerts.push({ label: 'Expired', text: `${expired} live ${plural(expired)} ${expired === 1 ? 'has' : 'have'} passed the contract period.`, route, sticky: true });
+        alerts.push({ label: 'Expired', text: `${expired} live ${plural(expired)} ${expired === 1 ? 'has' : 'have'} passed the contract period.`, route });
       }
       if (ending || expired) {
         const parts = [];
