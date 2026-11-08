@@ -104,7 +104,7 @@ begin
         'Hardware: ' || new.hardware,
         'Accessories included: ' || new.accessories_included
       ),
-      trim(concat_ws(' ', new.brand, new.model, new.color)) || ' | Authenticated Pre-Owned | Purse Maison',
+      trim(concat_ws(' ', new.brand, new.model, new.color)),
       'Authenticated pre-owned ' || trim(concat_ws(' ', new.brand, new.model, new.color)) || ' available at Purse Maison.',
       (select value from public.app_settings where key = 'authenticity_footer'),
       case when new.price >= 200000

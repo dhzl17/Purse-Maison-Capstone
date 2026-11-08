@@ -247,10 +247,20 @@ Object.assign(ConsignmentFlow, {
         await this.updateListingPhoto(btn.dataset.setCover, { is_primary: true });
       });
     }));
-
+    
+    let checklistQueue = Promise.resolve();
     document.querySelectorAll('[data-check-step]').forEach((box) => box.addEventListener('change', () => {
       const steps = Array.from(document.querySelectorAll('[data-check-step]:checked')).map((b) => b.dataset.checkStep);
-      this.save(null, null, () => this.updateItem(i.id, { photo_edit_checklist: steps }));
+      i.photoChecklist = steps;
+      Router.rerender();
+      checklistQueue = checklistQueue
+        .then(() => this.updateItem(i.id, { photo_edit_checklist: steps }))
+        .catch(async (err) => {
+          console.error(err);
+          showToast(this.friendly(err));
+          try { await DataStore.loadPipeline(); } catch (e) { console.error(e); }
+          Router.rerender();
+        });
     }));
 
     on('design-approve', (btn) => this.save(btn, `${i.code} photos approved and sent to the manager.`,
@@ -280,7 +290,7 @@ Object.assign(ConsignmentFlow, {
           [field('title'), Validate.itemText(t('title'), 'Title', false, 150)],
           [field('description'), Validate.notes(t('description'), 'Description', false, 5000)],
           [field('specifications'), Validate.notes(t('specifications'), 'Specifications', false, 5000)],
-          [field('seo_title'), Validate.itemText(t('seo_title'), 'SEO title', false, 150)],
+          [field('seo_title'), (t('seo_title') || '').length > 150 ? 'SEO title' : null],
           [field('seo_description'), Validate.notes(t('seo_description'), 'SEO description', false, 500)],
         ])) return;
         this.save(form.querySelector('button[type="submit"]'), 'Listing draft saved.', () => this.updateListing(i.listing.id, {

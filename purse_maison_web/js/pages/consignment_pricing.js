@@ -38,22 +38,38 @@ Object.assign(ConsignmentFlow, {
     };
   },
 
-  /** Lowest price (rounded up to ₱100) whose payout covers the agreed payout. */
-  suggestPrice(agreedPayout, category) {
-    if (!(agreedPayout > 0)) return null;
-    const candidates = new Set();
-    for (const t of DB.markupTiers || []) {
-      if (t.markup_type === 'flat') candidates.add(agreedPayout + t.markup_value);
-      else candidates.add(agreedPayout / (1 - t.markup_value / 100));
-      candidates.add(t.threshold_price);
+    /** Client formula (Module 31): markup tier on the payout, platform fee, final price rounded up to ₱100. */
+  clientPricing(payout) {
+    if (!(payout > 0)) return null;
+    const cents = (x) => Math.round(x * 100) / 100;
+    let markup;
+    if (payout <= 10000) markup = 3000;
+    else if (payout <= 20000) markup = 6000;
+    else if (payout < 50000) markup = 10000;
+    else if (payout < 100000) markup = 13000;
+    else if (payout < 151000) markup = 18000;
+    else markup = cents(payout * 0.12);
+    const base = payout + markup;
+    const fee = base < 200000 ? cents(base * 0.045) : 9000;
+    const price = Math.ceil(cents(base + fee) / 100) * 100;
+    return { markup, fee, price };
+  },
+
+  suggestPrice(agreedPayout) {
+    const c = this.clientPricing(agreedPayout);
+    return c ? c.price : null;
+  },
+
+  pricePlan(price, i) {
+    if (!(price > 0)) return null;
+    if (i.agreedPayout > 0) {
+      const c = this.clientPricing(i.agreedPayout);
+      const markup = price - i.agreedPayout - c.fee;
+      return { client: true, payout: i.agreedPayout, fee: c.fee, markup,
+               suggested: c.price, tierMarkup: c.markup, minPrice: i.agreedPayout + c.fee, ok: markup >= 0 };
     }
-    let best = null;
-    for (const raw of candidates) {
-      const p = Math.ceil(raw / 100) * 100;
-      const m = this.previewMarkup(p, category);
-      if (m && p - m.markup >= agreedPayout && (best === null || p < best)) best = p;
-    }
-    return best;
+    const m = this.previewMarkup(price, i.category);
+    return m ? { client: false, payout: price - m.markup, fee: null, markup: m.markup, label: m.label, ok: true } : null;
   },
 
   // ------------------------------------------------------------------ render
@@ -103,11 +119,11 @@ Object.assign(ConsignmentFlow, {
 
           <h3 style="font-size:14px; margin:18px 0 8px;">Final Selling Price</h3>
           <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-            <input class="field-input" id="price-input" type="number" min="1" step="100" value="${i.price ?? ''}" placeholder="e.g. 265000" style="max-width:220px;" ${act ? '' : 'disabled'}>
+            <input class="field-input" id="price-input" type="number" min="1" step="100" value="${i.price ?? suggested ?? ''}" placeholder="e.g. 265000" style="max-width:220px;" ${act ? '' : 'disabled'}>
             ${act ? '<button class="btn-confirm" id="price-save">Save Price</button>' : ''}
             ${act && suggested ? `<button class="btn-secondary" id="price-suggest" data-price="${suggested}">Suggest: ${this.peso(suggested)}</button>` : ''}
           </div>
-          ${suggested ? `<small class="cell-muted">Covers the agreed payout of ${this.peso(i.agreedPayout)}. Adjust for market value.</small>` : ''}
+          ${suggested ? `<small class="cell-muted">Suggested price = agreed payout ${this.peso(i.agreedPayout)} + markup + platform fee, rounded up to ₱100. You can override it.</small>` : ''}
           <div id="price-preview" style="margin-top:12px;"></div>
         </div>
 
@@ -117,6 +133,7 @@ Object.assign(ConsignmentFlow, {
             <div><span class="cell-muted">Selling price:</span> <strong>${this.peso(i.price)}</strong></div>
             <div><span class="cell-muted">Markup (company commission):</span> <strong>${this.peso(i.markup)}</strong></div>
             <div><span class="cell-muted">Consignor payout:</span> <strong>${this.peso(i.consignorPayout)}</strong></div>
+            ${i.platformFee != null ? `<div><span class="cell-muted">Platform fee (not income):</span> <strong>${this.peso(i.platformFee)}</strong></div>` : ''}
           </div>
           ${short ? `<div style="background:#FEF2F2; border:1px solid #FCA5A5; border-radius:8px; padding:8px; font-size:12px; margin-top:8px;">
             The payout is ${this.peso(i.agreedPayout - i.consignorPayout)} below the agreed payout. Confirm only if the consignor accepted it.</div>` : ''}
@@ -125,7 +142,7 @@ Object.assign(ConsignmentFlow, {
               <input type="checkbox" id="price-approved" ${i.priceApproved ? 'checked' : ''} ${act && i.price != null ? '' : 'disabled'}> Final price approved</label>
             <label style="display:flex; gap:8px; align-items:center; font-size:13px; padding:4px 0;">
               <input type="checkbox" id="payout-confirmed" ${i.payoutConfirmed ? 'checked' : ''} ${act && i.price != null ? '' : 'disabled'}> Consignor payout confirmed</label>
-            ${act ? `<button class="btn-confirm" id="price-confirm" style="width:100%; margin-top:10px;${i.price != null ? '' : ' opacity:.5; cursor:not-allowed;'}" ${i.price != null ? '' : 'disabled'}>Confirm → Listing Creation</button>` : ''}
+            ${act ? `<button class="btn-confirm" id="price-confirm" style="width:100%; margin-top:10px;${i.price != null ? '' : ' opacity:.5; cursor:not-allowed;'}" ${i.price != null ? '' : 'disabled'}>Confirm</button>` : ''}
             <small class="cell-muted">Both boxes must be ticked. Changing the price later clears them.</small>
           </div>
           <button class="btn-secondary" id="price-history" style="width:100%; margin-top:14px;">View Activity Log</button>
@@ -133,26 +150,33 @@ Object.assign(ConsignmentFlow, {
       </div>`;
   },
 
-  updatePricePreview(i) {
+    updatePricePreview(i) {
     const box = document.getElementById('price-preview');
     const input = document.getElementById('price-input');
     if (!box || !input) return;
     const price = Number(input.value);
     if (!(price > 0)) { box.innerHTML = ''; return; }
-    const m = this.previewMarkup(price, i.category);
-    if (!m) {
+    const p = this.pricePlan(price, i);
+    if (!p) {
       box.innerHTML = `<div style="background:#FEF2F2; border:1px solid #FCA5A5; border-radius:8px; padding:10px; font-size:12.5px;">
         No markup tier covers ${this.peso(price)} for "${escapeHtml(i.category || 'this category')}". This range is still an open question for the client.</div>`;
       return;
     }
-    const payout = price - m.markup;
-    const below = i.agreedPayout != null && payout < i.agreedPayout;
+    if (p.client && !p.ok) {
+      box.innerHTML = `<div style="background:#FEF2F2; border:1px solid #FCA5A5; border-radius:8px; padding:10px; font-size:12.5px;">
+        This price is too low. It must be at least ${this.peso(p.minPrice)} (agreed payout ${this.peso(p.payout)} + platform fee ${this.peso(p.fee)}).</div>`;
+      return;
+    }
     box.innerHTML = `
       <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px; font-size:12.5px; line-height:1.8;">
-        <div><span class="cell-muted">Markup tier:</span> ${escapeHtml(m.label)}</div>
-        <div><span class="cell-muted">Markup (company commission):</span> <strong>${this.peso(m.markup)}</strong></div>
-        <div><span class="cell-muted">Consignor payout:</span> <strong style="color:${below ? 'var(--danger-red)' : 'var(--green)'};">${this.peso(payout)}</strong>
-          ${i.agreedPayout != null ? `<span class="cell-muted">(agreed ${this.peso(i.agreedPayout)})</span>` : ''}</div>
+        ${p.client
+          ? `<div><span class="cell-muted">Consignor payout:</span> <strong style="color:var(--green);">${this.peso(p.payout)}</strong></div>
+             <div><span class="cell-muted">Platform fee (pays the platform, not income):</span> <strong>${this.peso(p.fee)}</strong></div>
+             <div><span class="cell-muted">Markup (company commission):</span> <strong>${this.peso(p.markup)}</strong>
+               ${price !== p.suggested ? `<span class="cell-muted">(suggested price is ${this.peso(p.suggested)}; markup tier is ${this.peso(p.tierMarkup)})</span>` : ''}</div>`
+          : `<div><span class="cell-muted">Markup tier:</span> ${escapeHtml(p.label)}</div>
+             <div><span class="cell-muted">Markup (company commission):</span> <strong>${this.peso(p.markup)}</strong></div>
+             <div><span class="cell-muted">Consignor payout:</span> <strong>${this.peso(p.payout)}</strong></div>`}
         ${price >= LAYAWAY_MIN_PRICE ? '<div class="cell-muted">Layaway clause will be added to the listing (₱200,000 and above).</div>' : ''}
       </div>`;
   },
@@ -174,8 +198,10 @@ Object.assign(ConsignmentFlow, {
     on('price-suggest', (btn) => { input.value = btn.dataset.price; this.updatePricePreview(i); });
     on('price-save', (btn) => {
       const price = Number(input.value);
+      const plan = this.pricePlan(price, i);
       const problem = Validate.amount(input.value, 'Selling price')
-        || (this.previewMarkup(price, i.category) ? null : 'No markup tier covers this price. Choose a price in a covered range.');
+        || (!plan ? 'No markup tier covers this price. Choose a price in a covered range.'
+          : !plan.ok ? `Price must be at least ${this.peso(plan.minPrice)} (agreed payout plus platform fee).` : null);
       if (Validate.show(null, [[input, problem]])) return;
       this.save(btn, `Price saved: ${this.peso(price)}.`, () => this.updateItem(i.id, { price }));
     });
