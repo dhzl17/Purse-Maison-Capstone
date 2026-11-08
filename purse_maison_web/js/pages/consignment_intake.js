@@ -64,7 +64,7 @@ const INTAKE_PHOTO_TYPES = {
   front: 'Front', back: 'Back', side_left: 'Left side', side_right: 'Right side', underside: 'Bottom',
   inside: 'Inside', serial_number: 'Serial number', date_code: 'Date code', hardware: 'Hardware', accessories: 'Accessories',
 };
-const OPTIONAL_INTAKE_PHOTOS = { microchip: 'Microchip' };
+const MIN_INTAKE_PHOTOS = 10;
 const PHOTO_NAME_HINTS = [
   ['serial_number', ['serial']],
   ['date_code', ['datecode', 'date']],
@@ -139,8 +139,7 @@ const ConsignmentFlow = {
   },
   itemName(i) { return [i.brand, i.model, i.color].filter(Boolean).join(' '); },
   fmtDate(iso) { return iso ? DataStore.formatDateTime(iso) : '—'; },
-  photoCount(i) { return Object.keys(INTAKE_PHOTO_TYPES).filter((t) => i.photos[t]).length; },
-
+  photoCount(i) { return (i.photoList || []).length; },
   friendly(err) {
     const msg = (err && (err.message || err.error_description)) || 'Unknown error';
     if (/duplicate key/i.test(msg)) {
@@ -200,7 +199,23 @@ const ConsignmentFlow = {
     if (error) throw error;
   },
 
-  /** Signature images: PNG, JPG or JPEG only, up to 2 MB (the bucket enforces the same limits). */
+  async replaceIntakePhoto(item, photo, file) {
+    const problem = this.checkFile(file, false);
+    if (problem) throw new Error(problem);
+    const path = `${item.id}/${photo.photo_type}-${Date.now()}.${this.extOf(file)}`;
+    const up = await sbClient.storage.from('intake-photos').upload(path, file, { contentType: file.type });
+    if (up.error) throw up.error;
+    const { data, error } = await sbClient.from('item_photos').update({ storage_path: path }).eq('id', photo.id).select('id');
+    if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Your role is not allowed to change intake photos.');
+  },
+
+  async removeIntakePhoto(photo) {
+    const { data, error } = await sbClient.from('item_photos').delete().eq('id', photo.id).select('id');
+    if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Your role is not allowed to remove intake photos.');
+  },
+
   checkSignatureFile(file) {
     if (!file) return 'Choose the signature image first.';
     if (!['image/png', 'image/jpeg'].includes(file.type) || !/\.(png|jpe?g)$/i.test(file.name)) {
@@ -421,45 +436,74 @@ const ConsignmentFlow = {
     });
   },
 
-  renderPhotoGrid(item, editable) {
-    const slot = (type, label, optional) =>
-      this.photoCardHtml('intake-photos', type, item.photos[type], label, optional, editable, 'data-photo-upload');
+  intakeTileHtml(p, editable) {
+    const path = escapeHtml(p.storage_path);
     return `
-      ${editable ? this.renderBulkPhotoUpload('intake') : ''}
-      <div class="photo-tile-grid"${editable ? ' data-drop-key="intake"' : ''}>
-        ${Object.entries(INTAKE_PHOTO_TYPES).map(([t, l]) => slot(t, l, false)).join('')}
-        ${Object.entries(OPTIONAL_INTAKE_PHOTOS).map(([t, l]) => slot(t, l, true)).join('')}
-      </div>
-      <div class="photo-progress ${this.photoCount(item) === 10 ? 'is-complete' : ''}">
-        ${this.photoCount(item)} / 10 required photos uploaded
+      <div class="photo-media-tile">
+        <div class="photo-media-img" data-photo-preview="1" data-photo-bucket="intake-photos" data-photo-path="${path}" title="Click to enlarge">
+          <img data-photo-bucket="intake-photos" data-photo-path="${path}" alt="Intake photo">
+        </div>
+        ${editable ? `<div class="photo-media-actions">
+          <label class="photo-media-btn" title="Replace this photo"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i><input type="file" accept="image/jpeg,image/png,image/webp" data-intake-replace="${p.id}" hidden></label>
+          <button type="button" class="photo-media-btn" data-intake-remove="${p.id}" title="Remove this photo"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
+        </div>` : ''}
+      </div>`;
+  },
+
+  renderPhotoGrid(item, editable) {
+    const photos = item.photoList || [];
+    const n = photos.length;
+    const add = editable
+      ? '<button type="button" class="photo-media-add" id="intake-media-add"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add</span></button>' : '';
+    return `
+      ${editable ? this.renderBulkPhotoUpload('intake', 'JPG, JPEG, PNG and WEBP. Max 10 MB each.') : ''}
+      ${n || editable
+        ? `<div class="photo-media-grid">${photos.map((p) => this.intakeTileHtml(p, editable)).join('')}${add}</div>`
+        : '<p class="cell-muted" style="font-size:12.5px;">No photos uploaded yet.</p>'}
+      <div class="photo-progress ${n >= MIN_INTAKE_PHOTOS ? 'is-complete' : ''}">
+        ${n} photo${n === 1 ? '' : 's'} uploaded${n < MIN_INTAKE_PHOTOS ? ` · at least ${MIN_INTAKE_PHOTOS} needed` : ''}
       </div>`;
   },
 
   bindPhotoUploads(item) {
     this.bindPhotoPreviews();
-    document.querySelectorAll('[data-photo-upload]').forEach((input) => {
+    document.querySelectorAll('[data-intake-replace]').forEach((input) => {
       input.addEventListener('change', async (e) => {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
-        const label = INTAKE_PHOTO_TYPES[input.dataset.photoUpload] || OPTIONAL_INTAKE_PHOTOS[input.dataset.photoUpload];
-        input.closest('label').querySelector('.photo-card-action-text').textContent = 'Uploading…';
-        await this.save(null, `${label} photo uploaded.`, () => this.uploadIntakePhoto(item, input.dataset.photoUpload, file));
+        const photo = (item.photoList || []).find((p) => p.id === input.dataset.intakeReplace);
+        if (!photo) return;
+        const tile = input.closest('.photo-media-tile');
+        if (tile) tile.classList.add('is-uploading');
+        await this.save(null, 'Photo replaced.', () => this.replaceIntakePhoto(item, photo, file));
       });
     });
+    document.querySelectorAll('[data-intake-remove]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const photo = (item.photoList || []).find((p) => p.id === btn.dataset.intakeRemove);
+        if (!photo) return;
+        this.confirm('Remove photo', 'Remove this photo from the item? This cannot be undone.', 'Remove',
+          () => this.save(null, 'Photo removed.', () => this.removeIntakePhoto(photo)));
+      });
+    });
+    const addTile = document.getElementById('intake-media-add');
+    if (addTile) addTile.addEventListener('click', () => {
+      const zone = document.querySelector('#bulk-intake .bulk-dropzone');
+      if (zone) zone.click();
+    });
     this.fillPhotos('intake-photos');
-    this.bindBulkPhotoUpload('intake', { ...INTAKE_PHOTO_TYPES, ...OPTIONAL_INTAKE_PHOTOS }, item.photos,
-      (type, file) => this.uploadIntakePhoto(item, type, file));
+    this.bindBulkPhotoUpload('intake', {}, {}, (type, file) => this.uploadIntakePhoto(item, type, file), 'extra');
   },
 
   /** Upload box shown above an editable photo grid: one Upload button, or drag & drop several photos. */
-  renderBulkPhotoUpload(key) {
+  renderBulkPhotoUpload(key, sub) {
     return `
       <div class="bulk-upload" id="bulk-${key}">
         <input type="file" class="bulk-file" accept="image/jpeg,image/png,image/webp" multiple hidden>
         <div class="bulk-dropzone" tabindex="0" role="button" aria-label="Upload photos">
           <span class="btn-secondary bulk-upload-btn"><i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i> Upload</span>
           <div class="bulk-dropzone-hint">Choose photos or drag &amp; drop them here.</div>
-          <div class="bulk-dropzone-sub">JPG, JPEG, PNG and WEBP. Max 10 MB each. Photos fill the empty tiles in order.</div>
+          <div class="bulk-dropzone-sub">${escapeHtml(sub || 'JPG, JPEG, PNG and WEBP. Max 10 MB each. Photos fill the empty tiles in order.')}</div>
         </div>
       </div>`;
   },
@@ -468,7 +512,7 @@ const ConsignmentFlow = {
    * types: { photo_type: label } for this grid. filled: which types already have a photo.
    * uploadOne(type, file): the existing single-photo upload (intake or listing), reused for each file.
    */
-  bindBulkPhotoUpload(key, types, filled, uploadOne) {
+  bindBulkPhotoUpload(key, types, filled, uploadOne, spare) {
     const root = document.getElementById(`bulk-${key}`);
     if (!root) return;
     const input = root.querySelector('.bulk-file');
@@ -515,9 +559,13 @@ const ConsignmentFlow = {
         rest.forEach((f) => {
           const t = order.find((x) => !filled[x] && !taken.has(x));
           if (t) { taken.add(t); jobs.push({ type: t, file: f }); }
-          else skipped.push(`${f.name}: no empty tile left. Drop it on the tile you want to replace.`);
+          else if (spare) jobs.push({ type: spare, file: f });
+          else skipped.push(grid
+            ? `${f.name}: no empty tile left. Drop it on the tile you want to replace.`
+            : `${f.name}: all photo slots are already filled. Use the replace icon on a photo instead.`);
         });
-        jobs.sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
+        const pos = (t) => (order.includes(t) ? order.indexOf(t) : order.length);
+        jobs.sort((a, b) => pos(a.type) - pos(b.type));
       }
 
       Validate.show(null, [[zone, skipped.length ? skipped : null]]);
@@ -533,7 +581,7 @@ const ConsignmentFlow = {
           await uploadOne(jobs[n].type, jobs[n].file);
         } catch (err) {
           console.error(err);
-          failed.push(`${types[jobs[n].type]} (${this.friendly(err)})`);
+          failed.push(`${types[jobs[n].type] || 'Photo'} (${this.friendly(err)})`);
         }
       }
       const done = jobs.length - failed.length;
@@ -873,7 +921,7 @@ const ConsignmentFlow = {
       </div>
 
       <details ${['initial_photo_submission', 'lead_qualification'].includes(i.stage) ? 'open' : ''} style="margin-bottom:12px;">
-        <summary style="font-weight:600; cursor:pointer; font-size:13px;">Initial Photos (${this.photoCount(i)}/10)</summary>
+        <summary style="font-weight:600; cursor:pointer; font-size:13px;">Initial Photos (${this.photoCount(i)})</summary>
         <div style="margin-top:8px;">${this.renderPhotoGrid(i, editable)}</div>
       </details>
 
@@ -1177,7 +1225,7 @@ const ConsignmentFlow = {
       [!!i.agreementId, 'Consignment agreement signed'],
       [i.accessories.length > 0, 'Accessories recorded'],
       [!!i.serial, 'Serial number recorded'],
-      [this.photoCount(i) === 10, `Required photos (${this.photoCount(i)}/10)`],
+      [this.photoCount(i) >= MIN_INTAKE_PHOTOS, `Photos uploaded (${this.photoCount(i)} of at least ${MIN_INTAKE_PHOTOS})`],
     ];
   },
 

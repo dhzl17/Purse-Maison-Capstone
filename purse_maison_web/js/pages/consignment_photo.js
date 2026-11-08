@@ -13,6 +13,7 @@ const LISTING_PHOTO_TYPES = {
   hardware: 'Hardware', serial_number: 'Serial number', accessories: 'Accessories',
 };
 const OPTIONAL_LISTING_PHOTOS = { lifestyle: 'Lifestyle' };
+const MIN_LISTING_PHOTOS = 7;
 
 Object.assign(ConsignmentFlow, {
   selectedPhotoItem: null,
@@ -23,9 +24,7 @@ Object.assign(ConsignmentFlow, {
   },
 
   listingPhotoCount(i) {
-    const lp = i.listingPhotos || {};
-    const side = lp.side_left || lp.side_right;
-    return Object.keys(LISTING_PHOTO_TYPES).filter((t) => (t === 'side_left' ? side : lp[t])).length;
+    return this.orderedListingPhotos(i).length;
   },
 
   canShoot(i) {
@@ -44,20 +43,126 @@ Object.assign(ConsignmentFlow, {
     if (error) throw error;
   },
 
-  renderListingPhotoGrid(i, editable) {
-    const lp = i.listingPhotos || {};
-    const slot = (type, label, optional) => {
-      const p = lp[type] || (type === 'side_left' ? lp.side_right : null);
-      return this.photoCardHtml('listing-photos', type, p && p.storage_path, label, optional, editable, 'data-listing-upload');
-    };
-    const n = this.listingPhotoCount(i);
+  orderedListingPhotos(i) {
+    const rank = (p) => (p.is_primary ? -1 : (p.sort_order == null ? 1e9 : p.sort_order));
+    const angles = Object.values(i.listingPhotos || {}).filter((p) => p.photo_type !== 'extra');
+    const extras = (i.listingPhotoList || []).filter((p) => p.photo_type === 'extra');
+    return angles.concat(extras)
+      .sort((a, b) => rank(a) - rank(b) || new Date(a.uploaded_at) - new Date(b.uploaded_at));
+  },
+
+  async replaceListingPhoto(item, photo, file) {
+    const problem = this.checkFile(file, false);
+    if (problem) throw new Error(problem);
+    const path = `${item.id}/${photo.photo_type}-${Date.now()}.${this.extOf(file)}`;
+    const up = await sbClient.storage.from('listing-photos').upload(path, file, { contentType: file.type });
+    if (up.error) throw up.error;
+    await this.updateListingPhoto(photo.id, { storage_path: path, edited: false });
+  },
+
+  async saveListingOrder(i, ids) {
+    const all = i.listingPhotoList || [];
+    const byId = {};
+    all.forEach((p) => { byId[p.id] = p; });
+    const oldCover = all.find((p) => p.is_primary);
+    if (oldCover && oldCover.id !== ids[0]) await this.updateListingPhoto(oldCover.id, { is_primary: false });
+    const jobs = [];
+    ids.forEach((id, n) => {
+      const p = byId[id];
+      const changes = {};
+      if (!p || p.sort_order !== n) changes.sort_order = n;
+      if (n === 0 && !(p && p.is_primary)) changes.is_primary = true;
+      if (Object.keys(changes).length) jobs.push(this.updateListingPhoto(id, changes));
+    });
+    await Promise.all(jobs);
+  },
+
+  listingTileHtml(p, o) {
+    const path = escapeHtml(p.storage_path);
+    const buttons = [
+      o.star ? `<button type="button" class="photo-media-btn" data-set-cover="${p.id}" title="Make this the cover photo"><i class="fa-solid fa-star" aria-hidden="true"></i></button>` : '',
+      o.action ? `<label class="photo-media-btn" title="${o.action.title}"><i class="fa-solid ${o.action.icon}" aria-hidden="true"></i><input type="file" accept="image/jpeg,image/png,image/webp" ${o.action.attr}="${p.id}" hidden></label>` : '',
+      o.remove ? `<button type="button" class="photo-media-btn" data-remove-photo="${p.id}" title="Remove this photo"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>` : '',
+    ].join('');
     return `
-      ${editable ? this.renderBulkPhotoUpload('listing') : ''}
-      <div class="photo-tile-grid"${editable ? ' data-drop-key="listing"' : ''}>
-        ${Object.entries(LISTING_PHOTO_TYPES).map(([t, l]) => slot(t, l, false)).join('')}
-        ${Object.entries(OPTIONAL_LISTING_PHOTOS).map(([t, l]) => slot(t, l, true)).join('')}
-      </div>
-      <div class="photo-progress ${n === 7 ? 'is-complete' : ''}">${n} / 7 required shots uploaded</div>`;
+      <div class="photo-media-tile${o.cover ? ' is-cover' : ''}"${o.drag ? ` draggable="true" data-photo-id="${p.id}"` : ''}>
+        <div class="photo-media-img" data-photo-preview="1" data-photo-bucket="listing-photos" data-photo-path="${path}" title="Click to enlarge">
+          <img data-photo-bucket="listing-photos" data-photo-path="${path}" alt="Listing photo">
+        </div>
+        ${o.cover ? '<span class="photo-media-cover">Cover</span>' : ''}
+        ${p.edited ? '<span class="photo-media-mark is-edited" title="Edited"><i class="fa-solid fa-check" aria-hidden="true"></i></span>' : ''}
+        ${buttons ? `<div class="photo-media-actions">${buttons}</div>` : ''}
+      </div>`;
+  },
+
+  renderListingGrid(i, mode) {
+    const photos = this.orderedListingPhotos(i);
+    const editable = mode !== 'view';
+    if (!photos.length && !editable) return '<p class="cell-muted" style="font-size:12.5px;">No listing photos yet.</p>';
+    const coverId = mode === 'photographer'
+      ? (photos[0] && photos[0].id)
+      : (photos.find((p) => p.is_primary) || {}).id;
+    const action = mode === 'photographer' ? { attr: 'data-replace-photo', icon: 'fa-arrows-rotate', title: 'Replace this photo' }
+      : (mode === 'designer' ? { attr: 'data-edit-upload', icon: 'fa-pen', title: 'Upload the edited version' } : null);
+    const tiles = photos.map((p) => this.listingTileHtml(p, {
+      cover: p.id === coverId, drag: editable, action, star: mode === 'designer' && p.id !== coverId, remove: mode === 'photographer',
+    })).join('');
+    const add = mode === 'photographer'
+      ? '<button type="button" class="photo-media-add" id="photo-media-add"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add</span></button>' : '';
+
+    let note = '';
+    if (mode === 'photographer') {
+      const n = photos.length;
+      note = `<div class="photo-media-hint">Drag photos to arrange them. The first photo is the cover.</div>
+        <div class="photo-progress ${n >= MIN_LISTING_PHOTOS ? 'is-complete' : ''}">${n} photo${n === 1 ? '' : 's'} uploaded${n < MIN_LISTING_PHOTOS ? ` · at least ${MIN_LISTING_PHOTOS} needed` : ''}</div>`;
+    } else if (mode === 'designer') {
+      note = '<div class="photo-media-hint">Drag to rearrange. The first photo is the cover. Use the pen to upload an edited version, or the star to make a photo the cover.</div>';
+    }
+    return `<div class="photo-media-grid" id="photo-media-grid">${tiles}${add}</div>${note}`;
+  },
+
+  bindListingDrag(i) {
+    const grid = document.getElementById('photo-media-grid');
+    if (!grid) return;
+    let dragged = null;
+    ['dragover', 'drop'].forEach((ev) => grid.addEventListener(ev, (e) => { if (!dragged) e.preventDefault(); }));
+    grid.querySelectorAll('.photo-media-tile[draggable="true"]').forEach((tile) => {
+      tile.addEventListener('dragstart', (e) => {
+        dragged = tile;
+        tile.classList.add('is-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', tile.dataset.photoId);
+      });
+      tile.addEventListener('dragend', () => {
+        tile.classList.remove('is-dragging');
+        grid.querySelectorAll('.is-over').forEach((t) => t.classList.remove('is-over'));
+        dragged = null;
+      });
+      tile.addEventListener('dragover', (e) => { if (dragged) { e.preventDefault(); tile.classList.add('is-over'); } });
+      tile.addEventListener('dragleave', () => tile.classList.remove('is-over'));
+      tile.addEventListener('drop', (e) => {
+        e.preventDefault();
+        tile.classList.remove('is-over');
+        if (!dragged || dragged === tile) return;
+        const tiles = Array.from(grid.querySelectorAll('.photo-media-tile[draggable="true"]'));
+        tiles.splice(tiles.indexOf(tile), 0, tiles.splice(tiles.indexOf(dragged), 1)[0]);
+        const ids = tiles.map((t) => t.dataset.photoId);
+        dragged = null;
+        this.save(null, 'Photo order saved.', () => this.saveListingOrder(i, ids));
+      });
+    });
+  },
+
+  async removeListingPhoto(photo) {
+    const { data, error } = await sbClient.from('listing_photos').delete().eq('id', photo.id).select('id');
+    if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Your role is not allowed to remove listing photos.');
+  },
+
+  renderListingPhotoGrid(i, editable) {
+    return `
+            ${editable ? this.renderBulkPhotoUpload('listing', 'JPG, PNG and WEBP. Max 10 MB each.') : ''}
+      ${this.renderListingGrid(i, editable ? 'photographer' : 'view')}`;
   },
 
   // ------------------------------------------------------------------ render
@@ -76,9 +181,9 @@ Object.assign(ConsignmentFlow, {
           ['Item ID', (i) => `<strong>${escapeHtml(i.code)}</strong>`],
           ['Item', (i) => `<div style="font-weight:600;">${escapeHtml(this.itemName(i))}</div><div class="cell-muted" style="font-size:11.5px;">${escapeHtml(i.category || '—')}</div>${i.photoRevisionNote ? badge('Revision requested', 'danger') : ''}`],
           ['Photographer', (i) => (i.photographerId ? escapeHtml(this.staffName(i.photographerId)) + (i.photographerId === this.myId() ? ' (you)' : '') : '<span class="cell-muted">Unassigned</span>')],
-          ['Shots', (i) => {
+          ['Photos', (i) => {
             const n = this.listingPhotoCount(i);
-            return badge(`${n}/7`, n === 7 ? 'success' : (n ? 'warning' : 'info'));
+            return badge(`${n}`, n >= MIN_LISTING_PHOTOS ? 'success' : (n ? 'warning' : 'info'));
           }],
           ['Waiting Since', (i) => `<span style="font-size:12px;">${escapeHtml(this.fmtDate(i.updatedAt))}</span>`],
         ], 'No items waiting for photography.')}
@@ -133,9 +238,9 @@ Object.assign(ConsignmentFlow, {
           <div class="card-title" style="margin:20px 0 10px;">Hand-off to Design</div>
           ${this.checklistHtml([
             [!!i.photographerId, 'Photographer assigned'],
-            [n === 7, `Required shots (${n}/7)`],
+            [n >= MIN_LISTING_PHOTOS, `Photos uploaded (${n} of at least ${MIN_LISTING_PHOTOS})`],
           ])}
-          ${canShoot ? `<button class="btn-confirm" id="photo-submit" style="width:100%; margin-top:12px;${n === 7 ? '' : ' opacity:.5; cursor:not-allowed;'}" ${n === 7 ? '' : 'disabled'}>Submit to Design</button>` : ''}
+          ${canShoot ? `<button class="btn-confirm" id="photo-submit" style="width:100%; margin-top:12px;${n >= MIN_LISTING_PHOTOS ? '' : ' opacity:.5; cursor:not-allowed;'}" ${n >= MIN_LISTING_PHOTOS ? '' : 'disabled'}>Submit to Design</button>` : ''}
           <button class="btn-secondary" id="photo-history" style="width:100%; margin-top:14px;">View Activity Log</button>
         </div>
       </div>`;
@@ -161,28 +266,41 @@ Object.assign(ConsignmentFlow, {
       this.save(btn, `${this.staffName(who)} assigned to ${i.code}.`, () => this.updateItem(i.id, { assigned_photographer_id: who }));
     });
     on('photo-release', (btn) => this.save(btn, `${i.code} unassigned.`, () => this.updateItem(i.id, { assigned_photographer_id: null })));
-    on('photo-submit', (btn) => this.save(btn, `${i.code} sent to Design for editing and approval.`,
-      () => this.updateItem(i.id, { current_stage: 'photo_editing_approval' })));
+    on('photo-submit', (btn) => this.save(btn, `${i.code} sent to Design for editing and approval.`, async () => {
+      await this.saveListingOrder(i, this.orderedListingPhotos(i).map((p) => p.id));
+      await this.updateItem(i.id, { current_stage: 'photo_editing_approval' });
+    }));
 
     this.bindPhotoPreviews();
-    document.querySelectorAll('[data-listing-upload]').forEach((input) => {
+    document.querySelectorAll('[data-replace-photo]').forEach((input) => {
       input.addEventListener('change', async (e) => {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
-        const type = input.dataset.listingUpload;
-        const label = LISTING_PHOTO_TYPES[type] || OPTIONAL_LISTING_PHOTOS[type];
-        const span = input.closest('label').querySelector('.photo-card-action-text');
-        if (span) span.textContent = 'Uploading…';
-        await this.save(null, `${label} shot uploaded.`, () => this.uploadListingPhoto(i, type, file));
+        const photo = (i.listingPhotoList || []).find((p) => p.id === input.dataset.replacePhoto);
+        if (!photo) return;
+        const tile = input.closest('.photo-media-tile');
+        if (tile) tile.classList.add('is-uploading');
+        await this.save(null, 'Photo replaced.', () => this.replaceListingPhoto(i, photo, file));
       });
     });
-    
-    const lp = i.listingPhotos || {};
-    const listingTypes = { ...LISTING_PHOTO_TYPES, ...OPTIONAL_LISTING_PHOTOS };
-    const filled = {};
-    Object.keys(listingTypes).forEach((t) => { filled[t] = !!(lp[t] || (t === 'side_left' && lp.side_right)); });
-    this.bindBulkPhotoUpload('listing', listingTypes, filled, (type, file) => this.uploadListingPhoto(i, type, file));
-      },
-  });
+    const addTile = document.getElementById('photo-media-add');
+    if (addTile) addTile.addEventListener('click', () => {
+      const zone = document.querySelector('#bulk-listing .bulk-dropzone');
+      if (zone) zone.click();
+    });
+    this.bindListingDrag(i);
+
+    document.querySelectorAll('[data-remove-photo]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const photo = (i.listingPhotoList || []).find((p) => p.id === btn.dataset.removePhoto);
+        if (!photo) return;
+        this.confirm('Remove photo', 'Remove this photo from the item? This cannot be undone.', 'Remove',
+          () => this.save(null, 'Photo removed.', () => this.removeListingPhoto(photo)));
+      });
+    });
+
+    this.bindBulkPhotoUpload('listing', {}, {}, (type, file) => this.uploadListingPhoto(i, type, file), 'extra');  },
+});
 
 ConsignmentFlow.pages['consignment-photo'] = ['renderPhoto', 'bindPhoto'];

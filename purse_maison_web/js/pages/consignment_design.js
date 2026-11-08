@@ -90,7 +90,7 @@ Object.assign(ConsignmentFlow, {
           ${this.queueTable(editing, this.selectedDesignItem, [
             ['Item ID', (i) => `<strong>${escapeHtml(i.code)}</strong>`],
             ['Item', (i) => `<div style="font-weight:600;">${escapeHtml(this.itemName(i))}</div>${i.managerReviews[0] && i.managerReviews[0].return_reason === 'photos' ? badge('Returned by manager', 'danger') : ''}`],
-            ['Progress', (i) => `<div style="font-size:12px;">Checklist ${i.photoChecklist.length}/5</div>${this.coverPhoto(i) ? badge('Cover chosen', 'success') : '<span class="cell-muted" style="font-size:12px;">No cover</span>'}`],
+            ['Progress', (i) => `<div style="font-size:12px;">Checklist ${i.photoChecklist.length}/5</div>`],
           ], 'No photos waiting for editing.')}
         </div>
         <div class="card col-narrow">
@@ -121,22 +121,7 @@ Object.assign(ConsignmentFlow, {
           <div class="card-title" style="margin-bottom:6px;">${escapeHtml(i.code)} · ${escapeHtml(this.itemName(i))}</div>
           ${returned ? `<div style="background:#FEF2F2; border:1px solid #FCA5A5; border-radius:8px; padding:10px; font-size:12.5px; margin:8px 0 12px;">
             <strong style="color:var(--danger-red);">Returned by the manager</strong> (${escapeHtml(this.fmtDate(returned.reviewed_at))})${returned.notes ? `: ${escapeHtml(returned.notes)}` : ''}</div>` : ''}
-          <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:10px;">
-            ${photos.map((p) => `
-              <div style="border:${p.is_primary ? '2px solid var(--card-navy-dark)' : '1px solid #E2E8F0'}; padding:8px; border-radius:8px; text-align:center;">
-                <div style="font-size:12px; font-weight:600;">${escapeHtml(this.photoLabel(p.photo_type))}
-                  ${p.edited ? badge('Edited', 'success') : ''} ${p.is_primary ? badge('Cover', 'info') : ''}</div>
-                <div style="margin:6px 0; height:130px; display:flex; align-items:center; justify-content:center; background:#F1F5F9; border-radius:6px; overflow:hidden;">
-                  <img data-photo-bucket="listing-photos" data-photo-path="${escapeHtml(p.storage_path)}" alt="" style="max-width:100%; max-height:130px; object-fit:contain;">
-                </div>
-                ${act ? `
-                  <label class="btn-secondary" style="display:inline-block; padding:3px 8px; font-size:11px; cursor:pointer;">
-                    <span>${p.edited ? 'Replace edit' : 'Upload edited'}</span>
-                    <input type="file" accept="image/jpeg,image/png,image/webp" data-edit-upload="${p.id}" style="display:none;">
-                  </label>
-                  ${p.is_primary ? '' : `<button class="btn-secondary" data-set-cover="${p.id}" style="padding:3px 8px; font-size:11px;">Set as cover</button>`}` : ''}
-              </div>`).join('')}
-          </div>
+          ${this.renderListingGrid(i, act ? 'designer' : 'view')}
         </div>
 
         <div class="card col-narrow">
@@ -150,7 +135,7 @@ Object.assign(ConsignmentFlow, {
             [!!cover, 'Cover photo chosen'],
           ])}</div>
           ${act ? `
-            <button class="btn-confirm" id="design-approve" style="width:100%; margin-top:12px;${ready ? '' : ' opacity:.5; cursor:not-allowed;'}" ${ready ? '' : 'disabled'}>Approve Photos → Manager</button>
+            <button class="btn-confirm" id="design-approve" style="width:100%; margin-top:12px;${ready ? '' : ' opacity:.5; cursor:not-allowed;'}" ${ready ? '' : 'disabled'}>Approve Photos</button>
             <div style="margin-top:18px; padding-top:12px; border-top:1px solid #E2E8F0;">
               <div class="card-title" style="margin-bottom:8px;">Needs Revision?</div>
               <textarea class="field-input" id="design-revision-note" rows="2" placeholder="What the photographer should reshoot, e.g. Front shot is blurry"></textarea>
@@ -231,6 +216,8 @@ Object.assign(ConsignmentFlow, {
     const i = this.item(this.selectedDesignItem);
     if (!i) return;
     this.fillPhotos('listing-photos');
+    this.bindPhotoPreviews();
+    this.bindListingDrag(i);
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', () => fn(el)); };
     on('design-history', () => this.showHistory(i));
 
@@ -242,9 +229,9 @@ Object.assign(ConsignmentFlow, {
         const photo = i.listingPhotoList.find((p) => p.id === input.dataset.editUpload);
         const problem = this.checkFile(file, false);
         if (problem) return showToast(problem);
-        const span = input.parentElement.querySelector('span');
-        if (span) span.textContent = 'Uploading…';
-        await this.save(null, `Edited ${this.photoLabel(photo.photo_type)} shot saved.`, async () => {
+        const tile = input.closest('.photo-media-tile');
+        if (tile) tile.classList.add('is-uploading');
+        await this.save(null, 'Edited photo saved.', async () => {
           const path = `${i.id}/${photo.photo_type}-edited-${Date.now()}.${this.extOf(file)}`;
           const up = await sbClient.storage.from('listing-photos').upload(path, file, { contentType: file.type });
           if (up.error) throw up.error;

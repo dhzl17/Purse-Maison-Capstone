@@ -91,21 +91,13 @@ Object.assign(ConsignmentFlow, {
           </div>
 
           <h3 style="font-size:14px; margin:0 0 8px;">Listing Photos</h3>
-          <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:10px;">
-            ${photos.map((p) => `
-              <div style="border:${p.is_primary ? '2px solid var(--card-navy-dark)' : '1px solid #E2E8F0'}; border-radius:8px; padding:6px; text-align:center;">
-                <div style="font-size:11.5px; font-weight:600;">${escapeHtml(this.photoLabel(p.photo_type))} ${p.is_primary ? badge('Cover', 'info') : ''}</div>
-                <div style="height:110px; display:flex; align-items:center; justify-content:center; background:#F1F5F9; border-radius:6px; overflow:hidden; margin-top:4px;">
-                  <img data-photo-bucket="listing-photos" data-photo-path="${escapeHtml(p.storage_path)}" alt="" style="max-width:100%; max-height:110px; object-fit:contain;">
-                </div>
-              </div>`).join('')}
-          </div>
+          ${this.renderListingGrid(i, 'view')}
         </div>
 
         <div class="card col-narrow">
           <div class="card-title" style="margin-bottom:10px;">Decision</div>
           ${act ? `
-            <button class="btn-confirm" id="mgr-approve" style="width:100%;">Approve → Pricing</button>
+            <button class="btn-confirm" id="mgr-approve" style="width:100%;">Approve</button>
             <div style="margin-top:16px; padding-top:12px; border-top:1px solid #E2E8F0;">
               <div class="field-group">
                 <label class="field-label">Return for revision</label>
@@ -178,6 +170,7 @@ Object.assign(ConsignmentFlow, {
     const i = this.item(this.selectedManagerItem);
     if (!i) return;
     this.fillPhotos('listing-photos');
+    this.bindPhotoPreviews();
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', () => fn(el)); };
     on('mgr-history', () => this.showHistory(i));
 

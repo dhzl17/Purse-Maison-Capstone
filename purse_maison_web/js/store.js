@@ -356,8 +356,8 @@ const DataStore = {
                  price_approved, payout_confirmed, markup, created_at, updated_at,
                  consignor:consignors(id, full_name, phone, email, id_verified, id_type, id_photo_path, verified_at),
                  agreement:consignment_agreements!consignment_items_agreement_id_fkey(signed_at, signature_path),
-                 item_photos(photo_type, storage_path, uploaded_at),
-                 listing_photos(id, photo_type, storage_path, is_primary, edited, uploaded_at),
+                 item_photos(id, photo_type, storage_path, uploaded_at),
+                 listing_photos(id, photo_type, storage_path, is_primary, sort_order, edited, uploaded_at),
                  price_negotiations(asking_price, counter_offer, notes, logged_at),
                  authentication_records(id, provider, category, fee, payment_status, payment_reference, payment_confirmed_at,
                    service_started_at, sla_deadline, primary_authenticator_id, secondary_authenticator_id,
@@ -389,10 +389,14 @@ const DataStore = {
     DB.pipelineItems = items.data.map((r) => {
       const photos = (r.item_photos || []).slice().sort((a, b) => new Date(a.uploaded_at) - new Date(b.uploaded_at));
       const latestPhoto = {};
-      for (const p of photos) latestPhoto[p.photo_type] = p.storage_path; // newest wins
+      for (const p of photos) latestPhoto[p.photo_type] = p.storage_path;
+      const latestRow = {};
+      for (const p of photos) if (p.photo_type !== 'extra') latestRow[p.photo_type] = p;
+      const photoList = Object.values(latestRow).concat(photos.filter((p) => p.photo_type === 'extra'))
+        .sort((a, b) => new Date(a.uploaded_at) - new Date(b.uploaded_at));
       const lphotos = (r.listing_photos || []).slice().sort((a, b) => new Date(a.uploaded_at) - new Date(b.uploaded_at));
       const latestListing = {};
-      for (const p of lphotos) latestListing[p.photo_type] = p; // newest wins
+      for (const p of lphotos) latestListing[p.photo_type] = p; 
       const listing = this.one(r.listings);
       return {
         id: r.id,
@@ -424,6 +428,7 @@ const DataStore = {
         updatedAt: r.updated_at,
         consignor: this.one(r.consignor) || { full_name: '(unknown)' },
         photos: latestPhoto,
+        photoList,
         listingPhotos: latestListing,
         listingPhotoList: lphotos,
         photographerId: r.assigned_photographer_id,
