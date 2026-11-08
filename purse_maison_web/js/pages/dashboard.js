@@ -259,6 +259,162 @@ const DashboardPage = {
     return insights;
   },
 
+  ai: { key: '', status: 'idle', summary: null, message: '' },
+
+  aiKey() { return JSON.stringify([this.filterRange, this.filterBrands]); },
+
+  canUseAi() {
+    const role = Session.currentUser && Session.currentUser.role;
+    return role === 'superAdmin' || role === 'manager';
+  },
+
+  buildAiFacts(stats) {
+    const brandSet = this.filterBrands === null ? null : new Set(this.filterBrands);
+    const money = (v) => (v >= 1000000 ? `₱${(v / 1000000).toFixed(2)}M` : `₱${formatAmount(v)}`);
+    const pct = (v) => `${Math.abs(v).toFixed(1)}%`;
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+    const facts = [];
+
+    facts.push(`These figures cover ${this.periodPhrase()}.`);
+    if (brandSet === null) {
+      facts.push('All brands are included.');
+    } else {
+      const names = this.brandOptions().filter(([k]) => brandSet.has(k)).map(([, n]) => n);
+      facts.push(`The view is limited to these brands only: ${names.slice(0, 8).join(', ') || 'none'}.`);
+    }
+
+    facts.push(`Total sales ${this.periodWith('over')} are ${money(stats.periodTotal)}.`);
+    if (stats.periodUnits > 0) {
+      facts.push(`${plural(stats.periodUnits, 'item')} sold in this period, at an average of ${money(stats.periodTotal / stats.periodUnits)} each.`);
+    }
+
+    const buckets = stats.buckets;
+    const totals = stats.monthlyTotals;
+    const last = buckets.length - 1;
+    const lastOpen = last >= 0 && buckets[last].end > drToday();
+    if (buckets.length >= 2) {
+      let best = 0;
+      totals.forEach((v, i) => { if (v > totals[best]) best = i; });
+      if (totals[best] > 0) {
+        const partial = lastOpen && best === last;
+        facts.push(`The ${buckets[best].unit} with the highest sales was ${buckets[best].name} at ${money(totals[best])}${partial ? ', but it is not over yet, so that figure is partial' : ''}.`);
+      }
+      if (lastOpen && last !== best && totals[last] > 0) {
+        facts.push(`${cap(buckets[last].name)} is not over yet, so its sales of ${money(totals[last])} are partial.`);
+      }
+    }
+
+    if (stats.lastMonthTotal > 0) {
+      facts.push(`This month's sales so far are ${pct(stats.growthPercent)} ${stats.growthPercent >= 0 ? 'above' : 'below'} last month's total of ${money(stats.lastMonthTotal)}. This month is not over yet, so the figure can still change.`);
+    }
+
+    facts.push(`${plural(stats.activeConsignedItems, 'item')} ${stats.activeConsignedItems === 1 ? 'is' : 'are'} still moving through consignment.`);
+
+    if (stats.avgDisplayDuration !== null && stats.soldWithDates) {
+      const known = stats.soldWithDates;
+      facts.push(`Items sold in this period took ${plural(Math.round(stats.avgDisplayDuration), 'day')} on average to sell after being added.`);
+      facts.push(`${plural(stats.fastMovingCount, 'item')} (${Math.round((stats.fastMovingCount / known) * 100)}% of recorded sales) sold within 30 days of being added.`);
+      if (stats.slowMovingCount) {
+        facts.push(`${plural(stats.slowMovingCount, 'item')} (${Math.round((stats.slowMovingCount / known) * 100)}% of recorded sales) took more than 60 days to sell.`);
+      }
+    }
+    facts.push(`${(stats.turnoverRate * 100).toFixed(1)}% of the items in inventory have sold.`);
+
+    const rows = (DB.dailySales || []).filter((s) => brandSet === null || brandSet.has(s.brandKey));
+    const { start, end } = this.range();
+    const prevStart = new Date(start.getTime() - (end - start));
+    const byBrand = (from, to) => {
+      const m = new Map();
+      for (const s of rows) {
+        if (s.date >= from && s.date < to) {
+          const e = m.get(s.brandKey) || { name: s.brand, v: 0 };
+          e.v += s.amount;
+          m.set(s.brandKey, e);
+        }
+      }
+      return m;
+    };
+    const now = byBrand(start, end);
+    const before = byBrand(prevStart, start);
+
+    if (stats.periodTotal > 0) {
+      [...now.values()].sort((a, b) => b.v - a.v).slice(0, 3).forEach((b) => {
+        facts.push(`${b.name} sales are ${money(b.v)}, ${Math.round((b.v / stats.periodTotal) * 100)}% of total sales.`);
+      });
+    }
+
+    const changes = [];
+    for (const [k, prev] of before) {
+      if (prev.v > 0) {
+        const cur = (now.get(k) || { v: 0 }).v;
+        changes.push({ name: prev.name, cur, prev: prev.v, pct: ((cur - prev.v) / prev.v) * 100 });
+      }
+    }
+    changes.sort((a, b) => b.pct - a.pct);
+    const rises = changes.filter((c) => c.pct >= 5).slice(0, 2);
+    const falls = changes.filter((c) => c.pct <= -5).slice(-2).reverse();
+    for (const c of [...rises, ...falls]) {
+      facts.push(`${c.name} sales ${c.pct >= 0 ? 'rose' : 'fell'} ${pct(c.pct)} compared with the previous period of the same length (${money(c.cur)} now, ${money(c.prev)} before).`);
+    }
+    return facts;
+  },
+
+  async runAiSummary() {
+    const key = this.aiKey();
+    const facts = this.buildAiFacts(this.computeStats());
+    this.ai = { key, status: 'loading', summary: null, message: '' };
+    Router.rerender();
+    let next;
+    try {
+      const { data, error } = await sbClient.functions.invoke('ai-insight', { body: { facts } });
+      if (error) {
+        let code = '';
+        try { code = (await error.context.json()).error || ''; } catch (_) { /* no details */ }
+        next = code === 'busy'
+          ? { key, status: 'busy', summary: null, message: '' }
+          : { key, status: 'error', summary: null, message: code && code !== 'unavailable' ? code : '' };
+      } else if (data && data.summary) {
+        next = { key, status: 'done', summary: data.summary, message: '' };
+      } else {
+        next = { key, status: 'error', summary: null, message: '' };
+      }
+    } catch (err) {
+      console.error(err);
+      next = { key, status: 'error', summary: null, message: '' };
+    }
+    this.ai = next;
+    Router.rerender();
+  },
+
+  renderAiItem(stats) {
+    const ai = this.ai.key === this.aiKey() ? this.ai : { status: 'idle' };
+    const btn = (label) => `<button type="button" class="btn-secondary" id="ai-summary-btn" style="padding:6px 14px; font-size:12.5px;"><i class="fa-solid fa-wand-magic-sparkles"></i> ${label}</button>`;
+    let body;
+    if (ai.status === 'loading') {
+      body = '<p>Analyzing the figures…</p>';
+    } else if (ai.status === 'done') {
+      const s = ai.summary;
+      const points = (Array.isArray(s.consider) ? s.consider : []).map((c) => `<div class="ai-point">${escapeHtml(c)}</div>`).join('');
+      body = `
+        <div class="ai-title"><i class="fa-solid fa-wand-magic-sparkles"></i> AI summary</div>
+        <div class="ai-label">Overview</div><p>${escapeHtml(s.overview)}</p>
+        <div class="ai-label">Watch</div><p>${escapeHtml(s.watch)}</p>
+        <div class="ai-label">Consider</div>${points}
+        <div class="ai-foot">AI-generated suggestions. Review before acting.</div>
+        ${btn('Regenerate')}`;
+    } else if (ai.status === 'busy') {
+      body = `<p>The AI summary is busy right now. Please try again in a minute.</p>${btn('Try again')}`;
+    } else if (ai.status === 'error') {
+      body = `<p>${escapeHtml(ai.message || 'The AI summary is not available right now. The insights below are not affected.')}</p>${btn('Try again')}`;
+    } else if (stats.periodTotal > 0) {
+      body = `<p>Summarises the figures shown on this page.</p>${btn('AI summary')}`;
+    } else {
+      body = '<p>There are no sales in this period to summarise.</p>';
+    }
+    return `<li class="ai-item"><div class="ai-summary">${body}</div></li>`;
+  },
+
   chartNotes(stats) {
     const short = (v) => (v >= 1e6 ? `₱${(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `₱${(v / 1e3).toFixed(0)}K` : `₱${formatAmount(v)}`);
     const pct = (v) => `${Math.abs(v).toFixed(0)}%`;
@@ -545,7 +701,7 @@ const DashboardPage = {
         <div class="key-insights col-narrow key-insights-scroll">
           <div class="key-insights-title">Key Insights</div>
           <div class="key-insights-body">
-            <ul>${insights.map(([label, text]) => `<li><span><strong>${escapeHtml(label)}:</strong> ${escapeHtml(text)}</span></li>`).join('')}</ul>
+            <ul>${this.canUseAi() ? this.renderAiItem(stats) : ''}${insights.map(([label, text]) => `<li><span><strong>${escapeHtml(label)}:</strong> ${escapeHtml(text)}</span></li>`).join('')}</ul>
           </div>
         </div>
       </div>
@@ -574,7 +730,7 @@ const DashboardPage = {
       Router.rerender();
     });
 
-    document.getElementById('dashboard-report')?.addEventListener('click', () => ReportExport.dashboard());
+    document.getElementById('ai-summary-btn')?.addEventListener('click', () => this.runAiSummary());
 
     const stats = this.computeStats();
     DataStore.refreshIfStale();
