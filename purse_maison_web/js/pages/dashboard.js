@@ -264,9 +264,8 @@ const DashboardPage = {
   aiKey() { return JSON.stringify([this.filterRange, this.filterBrands]); },
 
   canUseAi() {
-    const role = Session.currentUser && Session.currentUser.role;
-    return role === 'superAdmin' || role === 'manager';
-  },
+       return !!Session.currentUser;
+     },
 
   buildAiFacts(stats) {
     const brandSet = this.filterBrands === null ? null : new Set(this.filterBrands);

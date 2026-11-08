@@ -1,16 +1,3 @@
-// Edge Function: ai-insight
-// Writes the short "AI summary" shown at the top of Dashboard -> Key Insights.
-// The dashboard works out every figure itself and sends them here as plain sentences ("facts").
-// This function asks Gemini to turn those facts into three short parts: overview, watch, consider.
-// Gemini never calculates anything. If its text contains a number that is not in the facts, the summary is refused.
-//
-// Who can call it: a logged-in, active owner (super_admin) or manager.
-//
-// Secrets (Edge Functions -> Secrets): GEMINI_API_KEY, GEMINI_MODEL (the model ID you chose in Google AI Studio)
-//
-// Deploy: Supabase Dashboard -> Edge Functions -> Deploy a new function -> Via Editor,
-// name it exactly "ai-insight", paste this file, Deploy.
-
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const CORS = {
@@ -19,7 +6,7 @@ const CORS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const ALLOWED_ROLES = ['super_admin', 'manager'];
+const ALLOWED_ROLES = ['super_admin', 'manager', 'consignment_team', 'pricing_team', 'sales_associate'];
 const MAX_FACTS = 30;
 const MAX_FACT_LENGTH = 300;
 
@@ -91,7 +78,7 @@ Deno.serve(async (req) => {
 
     const { data: me } = await admin.from('profiles').select('role, is_active').eq('id', caller.user.id).maybeSingle();
     if (!me || !me.is_active || !ALLOWED_ROLES.includes(me.role)) {
-      return json(403, { error: 'Only the owner and managers can use the AI summary.' });
+      return json(403, { error: 'Your role can\'t use the AI summary.' });
     }
 
     const body = await req.json().catch(() => ({}));
