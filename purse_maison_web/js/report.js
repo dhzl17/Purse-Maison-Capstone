@@ -129,6 +129,7 @@ const ReportExport = {
 
   dashboard() { this.choose('Download Dashboard Report', () => this.dashboardPdf(), () => this.dashboardCsv()); },
   forecast() { this.choose('Download Sales Forecast Report', () => this.forecastPdf(), () => this.forecastCsv()); },
+  inventory() { this.choose('Download Inventory Report', () => this.inventoryPdf(), () => this.inventoryCsv()); },
 
   // -------------------------------------------------------------- dashboard
   dashboardData() {
@@ -233,6 +234,86 @@ const ReportExport = {
       { title: 'Monthly Forecast by Brand', headers: ['Brand', 'Month', 'Projected (PHP)', 'Likely low (PHP)', 'Likely high (PHP)'],
         rows: d.monthly.map(([b, m, v, lo, hi]) => [b, m, this.round(v), lo === null ? '' : this.round(lo), hi === null ? '' : this.round(hi)]) },
       { title: 'Prediction Alerts', headers: ['Alert'], rows: d.alerts.map((a) => [a]) },
+    ]);
+  },
+  
+  // -------------------------------------------------------------- inventory
+  inventoryData() {
+    const page = InventoryPage;
+    const all = DB.inventory;
+    const items = page.filterAndSortItems(all);
+    const count = (list, status) => list.filter((i) => i.status === status).length;
+    const expiring = DB.pipelineItems.filter((i) => {
+      if (!i.listing || i.listing.inventory_status !== 'published' || i.sale || i.withdrawal) return false;
+      const c = ConsignmentFlow.contractInfo(i);
+      return c && c.left <= 7;
+    }).length;
+    const statusNames = { available: 'Available', reserved: 'Reserved', sold: 'Sold', rejected: 'Rejected' };
+    const txnNames = { none: 'None', pending: 'Pending', cancelled: 'Cancelled', completed: 'Completed' };
+    const sortNames = { recently: 'Recently Added', oldest: 'Oldest First', 'price-high': 'Price High to Low', 'price-low': 'Price Low to High', alphabetical: 'Brand A-Z' };
+    const filters = [
+      ['Search', page.searchKeyword || 'None'],
+      ['Date added', dateRangeLabel(page.filterRange, 'day', 'all')],
+      ['Brands', page.filterBrands === null ? 'All brands' : page.filterBrands.join(', ') || 'None'],
+      ['Status', page.filterStatuses === null ? 'All statuses' : page.filterStatuses.map((s) => statusNames[s] || s).join(', ') || 'None'],
+      ['Sorted by', sortNames[page.sortBy] || page.sortBy],
+      ['Items in this report', String(items.length)],
+    ];
+    const kpis = [
+      ['Total Items', all.length],
+      ['Available Items', count(all, 'available')],
+      ['Reserved Items', count(all, 'reserved')],
+      ['Expiring Contracts', expiring],
+    ];
+    const statusRows = Object.entries(statusNames).map(([key, label]) => [label, count(items, key)]);
+    const byLocation = {};
+    items.forEach((i) => { byLocation[i.location] = (byLocation[i.location] || 0) + 1; });
+    const locationRows = Object.entries(byLocation).sort((a, b) => b[1] - a[1]);
+
+    // The slowest sales among the items in this report (days from being added to being sold)
+    const byId = Object.fromEntries(items.map((i) => [i.id, i]));
+    const slow = [];
+    for (const t of DB.salesTransactions) {
+      const item = t.itemId && byId[t.itemId];
+      const added = item && parseDateAdded(item.dateAdded);
+      if (!added) continue;
+      const days = Math.round((t.date - added) / 86400000);
+      if (days >= 0) slow.push([`${item.brand} ${item.category}`, days, item.price]);
+    }
+    slow.sort((a, b) => b[1] - a[1]);
+
+    const listRows = items.map((i) => [
+      i.id, i.brand, i.category, i.condition, statusNames[i.status] || i.status, i.location, i.dateAdded,
+      txnNames[i.transactionStatus] || i.transactionStatus, i.price,
+      i.price === '—' ? '' : parseAmountString(i.price),
+    ]);
+    return { filters, kpis, statusRows, locationRows, slow: slow.slice(0, 5), listRows };
+  },
+
+  inventoryPdf() {
+    const d = this.inventoryData();
+    const html = [
+      this.header('Inventory Report', d.filters),
+      this.section('Inventory Overview (all items)', this.table(['Indicator', 'Value'], d.kpis.map(([k, v]) => [k, String(v)]))),
+      this.section('Items by Status', this.table(['Status', 'Items'], d.statusRows.map(([k, v]) => [k, String(v)]))),
+      this.section('Inventory by Location', this.table(['Location', 'Items'], d.locationRows.map(([k, v]) => [k, String(v)]))),
+      this.section('Inventory Turnover Rate', this.chartImage('chart-turnover', 'Inventory Turnover Rate')),
+      this.section('Slowest-Moving Items', this.table(['Item', 'Days to sell', 'Price'], d.slow.map(([n, days, p]) => [n, String(days), p]))),
+      this.section(`Inventory List (${d.listRows.length} items)`,
+        this.table(['Item ID', 'Brand', 'Category', 'Condition', 'Status', 'Location', 'Date Added', 'Transaction', 'Price'],
+          d.listRows.map((r) => r.slice(0, 9)), 99)),
+    ].join('');
+    this.print(html);
+  },
+
+  inventoryCsv() {
+    const d = this.inventoryData();
+    this.downloadCsv('inventory', 'Purse Maison - Inventory Report', d.filters, [
+      { title: 'Inventory Overview (all items)', headers: ['Indicator', 'Value'], rows: d.kpis },
+      { title: 'Items by Status', headers: ['Status', 'Items'], rows: d.statusRows },
+      { title: 'Inventory by Location', headers: ['Location', 'Items'], rows: d.locationRows },
+      { title: 'Inventory List', headers: ['Item ID', 'Brand', 'Category', 'Condition', 'Status', 'Location', 'Date Added', 'Transaction Status', 'Price (PHP)'],
+        rows: d.listRows.map((r) => [...r.slice(0, 8), r[9]]) },
     ]);
   },
 };

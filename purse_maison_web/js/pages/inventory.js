@@ -152,7 +152,10 @@ const InventoryPage = {
             search: false,
           })}
         </div>
-        ${viewOnly ? '' : `<button class="btn-add" id="btn-add-inventory">+ Add Item</button>`}
+        <div class="report-actions">
+          <button type="button" class="btn-secondary report-btn" id="inventory-report"><i class="fa-solid fa-download"></i> Download Report</button>
+          ${viewOnly ? '' : `<button class="btn-add" id="btn-add-inventory">+ Add Item</button>`}
+        </div>
       </div>
 
 <div class="table-scroll">
@@ -286,7 +289,8 @@ const InventoryPage = {
     });
     const addBtn = document.getElementById('btn-add-inventory');
     if (addBtn) addBtn.addEventListener('click', () => this.openForm(null));
-
+    document.getElementById('inventory-report')?.addEventListener('click', () => ReportExport.inventory());
+    
     //location bar chart
     const filteredItems = this.filterAndSortItems(items);
     const byLocation = {};
