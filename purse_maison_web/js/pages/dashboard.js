@@ -346,7 +346,7 @@ const DashboardPage = {
 
     const changes = [];
     for (const [k, prev] of before) {
-      if (prev.v > 0) {
+      if (prev.v >= stats.periodTotal * 0.02) {
         const cur = (now.get(k) || { v: 0 }).v;
         changes.push({ name: prev.name, cur, prev: prev.v, pct: ((cur - prev.v) / prev.v) * 100 });
       }
