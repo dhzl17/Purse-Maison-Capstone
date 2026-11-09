@@ -729,6 +729,7 @@ const DashboardPage = {
       Router.rerender();
     });
 
+    document.getElementById('dashboard-report')?.addEventListener('click', () => ReportExport.dashboard());
     document.getElementById('ai-summary-btn')?.addEventListener('click', () => this.runAiSummary());
 
     const stats = this.computeStats();

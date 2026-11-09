@@ -263,7 +263,7 @@ const ConsignmentFlow = {
         </div>
         <label class="sig-consent"><input type="checkbox" id="sig-consent">
           <span>The consignor has read the key terms above and confirms this is their own signature.</span></label>
-        <button class="btn-secondary" id="int-sign" style="margin-top:10px;">Save Signed Agreement</button>
+        <button class="btn-secondary" id="int-sign" style="margin-top:10px;">Save</button>
       </div>`;
   },
 
