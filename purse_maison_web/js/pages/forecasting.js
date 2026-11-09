@@ -283,6 +283,7 @@ const ForecastingPage = {
       this.alertPage = parseInt(btn.dataset.page, 10);
       Router.rerender();
     });
+    document.getElementById('btn-request-forecast')?.addEventListener('click', () => this.requestForecast());
     document.getElementById('forecast-report')?.addEventListener('click', () => ReportExport.forecast());
 
     this.drawTrendChart();
