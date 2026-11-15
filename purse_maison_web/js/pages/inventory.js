@@ -79,13 +79,12 @@ const InventoryPage = {
     }
 
     if (this.searchKeyword) {
-      const kw = this.searchKeyword.toLowerCase();
-      list = list.filter(i =>
-        String(i.id).toLowerCase().includes(kw) ||
-        String(i.brand || '').toLowerCase().includes(kw) ||
-        String(i.category || '').toLowerCase().includes(kw) ||
-        String(i.location || '').toLowerCase().includes(kw)
-      );
+      const words = this.searchKeyword.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      list = list.filter((i) => {
+        const text = [i.id, i.brand, i.model, i.category, i.location, i.status]
+          .map((v) => String(v || '').toLowerCase()).join(' ');
+        return words.every((w) => text.includes(w));
+      });
     }
 
     return sortRecords(list, this.sortBy);

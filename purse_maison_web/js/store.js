@@ -155,6 +155,7 @@ const DataStore = {
       inventory.push({
         id: it.item_code,
         brand: it.brand || '—',
+        model: it.model || '',
         category: it.category || '—',
                 condition: notes || '—',
         status,

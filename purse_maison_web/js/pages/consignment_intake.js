@@ -665,8 +665,12 @@ const ConsignmentFlow = {
     let list = [...DB.pipelineItems];
     const kw = this.overviewSearch.trim().toLowerCase();
     if (kw) {
-      list = list.filter((i) => [i.code, i.brand, i.model, i.serial, i.microchip, i.consignor.full_name, STAGE_LABELS[i.stage]]
-        .some((v) => String(v || '').toLowerCase().includes(kw)));
+      const words = kw.split(/\s+/);
+      list = list.filter((i) => {
+        const text = [i.code, i.brand, i.model, i.color, i.category, i.serial, i.microchip, i.consignor.full_name, STAGE_LABELS[i.stage]]
+          .map((v) => String(v || '').toLowerCase()).join(' ');
+        return words.every((w) => text.includes(w));
+      });
     }
     if (this.overviewStages !== null) {
       const stages = new Set(this.overviewStages);
