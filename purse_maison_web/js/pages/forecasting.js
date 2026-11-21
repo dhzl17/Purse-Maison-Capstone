@@ -12,6 +12,7 @@ const ForecastingPage = {
   pageSize: 6,
   alertPage: 1,
   alertPageSize: 5,
+  ai: { key: '', status: 'idle', summary: null, message: '' },
 
   trendBadge(trend) {
     const map = { increasing: ['▲ Increasing', 'success'], decreasing: ['▼ Decreasing', 'danger'], stable: ['▬ Stable', 'warning'] };
@@ -83,7 +84,7 @@ const ForecastingPage = {
       if (s.projectedGrowthPercent >= ALERT_GROWTH_PERCENT) {
         alerts.push(`Demand for ${s.brand} is projected to rise ${s.projectedGrowthPercent}% over the next ${s.months} month${s.months === 1 ? '' : 's'}.`);
       } else if (s.projectedGrowthPercent <= -ALERT_GROWTH_PERCENT) {
-        alerts.push(`Demand for ${s.brand} is projected to fall ${Math.abs(s.projectedGrowthPercent)}% over the next ${s.months} month${s.months === 1 ? '' : 's'}. Consider reducing inventory.`);
+        alerts.push(`Demand for ${s.brand} is projected to fall ${Math.abs(s.projectedGrowthPercent)}% over the next ${s.months} month${s.months === 1 ? '' : 's'}. Review its live listings and contract end dates.`);
       }
     }
     if (meta.skipped && meta.skipped.length) {
@@ -108,6 +109,182 @@ const ForecastingPage = {
   runIsBusy() {
     const run = DB.forecastMeta.latestRun;
     return !!run && (run.status === 'queued' || run.status === 'running');
+  },
+
+  // ------------------------------------------------------------ AI forecast insights
+  canUseAi() {
+    return !!Session.currentUser;
+  },
+
+  /** The AI result belongs to one filter view of one forecast; changing either clears it. */
+  aiKey() {
+    return JSON.stringify([this.selectedBrands, this.selectedTrends, this.selectedMonths, DB.forecastMeta.generatedAt]);
+  },
+
+  /** Live listings (published, not sold, not being withdrawn) for the brands in view. */
+  liveListings(brandKeys) {
+    return DB.pipelineItems.filter((i) => i.listing && i.listing.inventory_status === 'published' && !i.sale && !i.withdrawal
+      && (!brandKeys || brandKeys.has(String(i.brand || '').toLowerCase())));
+  },
+
+  /**
+   * The few forecast findings that matter most, written as plain sentences for Gemini.
+   * Uses the same numbers as the charts on this page, plus the live listings, so the AI
+   * can connect the forecast to actions staff can take (contracts, featuring, follow-ups).
+   */
+  buildAiFacts() {
+    const facts = [];
+    const rows = this.visibleRows();
+    const months = this.monthsShown();
+    if (!rows.length || !months) return facts;
+
+    const peso = (v) => `₱${formatAmount(v)}`;
+    const pct = (v) => `${v > 0 ? '+' : ''}${v}%`;
+    const label = (d) => `${MONTH_ABBREV[d.getMonth()]} ${d.getFullYear()}`;
+    const narrowed = this.selectedBrands !== null || this.selectedTrends !== null;
+    const keys = new Set(rows.map((f) => f.brandKey));
+    const brandOk = (k) => (narrowed ? keys.has(k) : true);
+
+    const first = DB.forecastRows.reduce((min, r) => (!min || r.month < min ? r.month : min), null);
+    if (!first) return facts;
+    const last = new Date(first.getFullYear(), first.getMonth() + months - 1, 1);
+    const prev = new Date(first.getFullYear(), first.getMonth() - 1, 1);
+
+    facts.push(`Forecast period shown: the next ${months} month${months === 1 ? '' : 's'}, ${label(first)} to ${label(last)}. These are ARIMA estimates, not certain results. ${label(first)} is the current month and is not over yet.`);
+    facts.push(narrowed
+      ? `The view is limited to these brands: ${rows.map((f) => f.brand).join(', ')}.`
+      : `The view covers all ${rows.length} brands that have a forecast.`);
+
+    const projTotal = rows.reduce((sum, f) => sum + f.projectedValue, 0);
+    const histTotal = rows.reduce((sum, f) => sum + f.historicalValue, 0);
+    if (histTotal > 0) {
+      const g = Math.round(((projTotal - histTotal) / histTotal) * 1000) / 10;
+      facts.push(`Projected sales for these brands over the period: ${peso(projTotal)}, compared with ${peso(histTotal)} in the same number of months just before it (${pct(g)}).`);
+    } else {
+      facts.push(`Projected sales for these brands over the period: ${peso(projTotal)}.`);
+    }
+
+    // Next month, the same total and likely range as the Sales Trend chart.
+    let nextSum = 0, spread = 0;
+    for (const r of DB.forecastRows) {
+      if (!brandOk(r.brandKey) || r.month.getTime() !== first.getTime()) continue;
+      nextSum += r.revenue;
+      if (r.lower !== null && r.upper !== null) spread += ((r.upper - r.lower) / 2) ** 2;
+    }
+    const prevActual = DB.salesSeries
+      .filter((s) => brandOk(s.brandKey) && s.date.getFullYear() === prev.getFullYear() && s.date.getMonth() === prev.getMonth())
+      .reduce((sum, s) => sum + s.amount, 0);
+    if (nextSum > 0) {
+      const half = Math.sqrt(spread);
+      facts.push(`Projected sales for ${label(first)}: about ${peso(nextSum)}, likely between ${peso(Math.max(0, nextSum - half))} and ${peso(nextSum + half)}. Actual sales in ${label(prev)}, the last complete month, were ${peso(prevActual)}.`);
+    }
+
+    const count = (t) => rows.filter((f) => f.trend === t).length;
+    facts.push(`Of ${rows.length} brands, ${count('increasing')} are projected to grow, ${count('stable')} to stay stable (within ±${GROWTH_STABLE_BAND}%) and ${count('decreasing')} to decline.`);
+
+    // Only brands with a meaningful share of projected sales; tiny brands swing on one item.
+    const share = (f) => (projTotal > 0 ? f.projectedValue / projTotal : 0);
+    const significant = rows.filter((f) => f.projectedGrowthPercent !== null && share(f) >= 0.02);
+    const reliability = (f) => {
+      if (f.mae === null || !f.months) return 'not measured';
+      const avgMonth = f.projectedValue / f.months;
+      if (avgMonth <= 0) return 'low';
+      const ratio = f.mae / avgMonth;
+      return ratio <= 0.4 ? 'fairly reliable' : ratio <= 0.8 ? 'moderately reliable' : 'low (its past forecast error is large compared with its monthly sales)';
+    };
+    const describe = (f) => `${f.brand}: projected ${peso(f.projectedValue)} over the period (${pct(f.projectedGrowthPercent)} compared with the months before), about ${Math.round(share(f) * 100)}% of projected sales. Forecast reliability: ${reliability(f)}.`;
+
+    const largest = [...rows].sort((a, b) => b.projectedValue - a.projectedValue)[0];
+    const risers = significant.filter((f) => f.trend === 'increasing').sort((a, b) => b.projectedGrowthPercent - a.projectedGrowthPercent).slice(0, 2);
+    const fallers = significant.filter((f) => f.trend === 'decreasing').sort((a, b) => a.projectedGrowthPercent - b.projectedGrowthPercent).slice(0, 2);
+    if (largest && !risers.includes(largest) && !fallers.includes(largest)) facts.push(`Largest brand by projected sales. ${describe(largest)}`);
+    risers.forEach((f) => facts.push(`Rising brand. ${describe(f)}`));
+    fallers.forEach((f) => facts.push(`Declining brand. ${describe(f)}`));
+
+    const skipped = DB.forecastMeta.skipped || [];
+    if (!narrowed && skipped.length) {
+      facts.push(`${skipped.length} other brand${skipped.length === 1 ? ' is' : 's are'} not forecast because they have fewer than 12 months with sales.`);
+    }
+
+    // Live listings: what staff can act on now.
+    const live = this.liveListings(narrowed ? keys : null);
+    const info = (i) => ConsignmentFlow.contractInfo(i);
+    const ending = live.filter((i) => { const c = info(i); return c && c.left <= 14; });
+    const expired = ending.filter((i) => info(i).left <= 0).length;
+    const longShown = live.filter((i) => { const c = info(i); return c && c.posted > 45; }).length;
+    facts.push(`Live listings now: ${live.length}. ${ending.length} have 14 days or less left on their consignment contract (${expired} already past the end), and ${longShown} have been on display for more than 45 days. Contracts usually run 60 days.`);
+
+    for (const f of fallers) {
+      const mine = live.filter((i) => String(i.brand || '').toLowerCase() === f.brandKey);
+      const soon = mine.filter((i) => { const c = info(i); return c && c.left <= 14; }).length;
+      facts.push(mine.length
+        ? `${f.brand} (declining) has ${mine.length} live listing${mine.length === 1 ? '' : 's'}; ${soon} with 14 days or less left on the contract.`
+        : `${f.brand} (declining) has no live listings right now.`);
+    }
+    for (const f of risers) {
+      const mine = live.filter((i) => String(i.brand || '').toLowerCase() === f.brandKey).length;
+      facts.push(mine
+        ? `${f.brand} (rising) has ${mine} live listing${mine === 1 ? '' : 's'} available to feature.`
+        : `${f.brand} (rising) has no live listings available right now.`);
+    }
+    return facts;
+  },
+
+  async runAiSummary() {
+    const key = this.aiKey();
+    const facts = this.buildAiFacts();
+    this.ai = { key, status: 'loading', summary: null, message: '' };
+    Router.rerender();
+    let next;
+    try {
+      await sbClient.auth.getSession();   // renews the login token first if it has expired
+      const { data, error } = await sbClient.functions.invoke('ai-insight', { body: { mode: 'forecast', facts } });
+      if (error) {
+        let code = '';
+        try { code = (await error.context.json()).error || ''; } catch (_) { /* no details */ }
+        next = code === 'busy'
+          ? { key, status: 'busy', summary: null, message: '' }
+          : { key, status: 'error', summary: null, message: code && code !== 'unavailable' ? code : '' };
+      } else if (data && data.summary && data.summary.outlook) {
+        next = { key, status: 'done', summary: data.summary, message: '' };
+      } else {
+        next = { key, status: 'error', summary: null, message: '' };
+      }
+    } catch (err) {
+      console.error(err);
+      next = { key, status: 'error', summary: null, message: '' };
+    }
+    this.ai = next;
+    Router.rerender();
+  },
+
+  renderAiCard(hasForecast) {
+    if (!this.canUseAi()) return '';
+    const ai = this.ai.key === this.aiKey() ? this.ai : { status: 'idle' };
+    const btn = (text) => `<button type="button" class="btn-secondary" id="fc-ai-btn" style="padding:6px 14px; font-size:12.5px;"><i class="fa-solid fa-wand-magic-sparkles"></i> ${text}</button>`;
+    let body;
+    if (ai.status === 'loading') {
+      body = '<p>Reading the forecast…</p>';
+    } else if (ai.status === 'done') {
+      const s = ai.summary;
+      const actions = (Array.isArray(s.actions) ? s.actions : []).map((a) => `<div class="ai-point">${escapeHtml(a)}</div>`).join('');
+      body = `
+        <div class="ai-title"><i class="fa-solid fa-wand-magic-sparkles"></i> AI forecast insights</div>
+        <div class="ai-label">Forecast Summary</div><p>${escapeHtml(s.outlook)}</p>
+        <div class="ai-label">Business Implications</div><p>${escapeHtml(s.meaning)}</p>
+        <div class="ai-label">Recommended Actions</div>${actions}
+        <div class="ai-foot">AI-generated from the forecast figures on this page. Forecasts are estimates; review before acting.</div>
+        ${btn('Regenerate')}`;
+    } else if (ai.status === 'busy') {
+      body = `<p>The AI is busy right now. Please try again in a minute.</p>${btn('Try again')}`;
+    } else if (ai.status === 'error') {
+      body = `<p>${escapeHtml(ai.message || 'The AI insights are not available right now. The charts and alerts are not affected.')}</p>${btn('Try again')}`;
+    } else if (hasForecast && this.visibleRows().length) {
+      body = `<p>Explains the key forecast findings shown on this page.</p>${btn('AI insights')}`;
+    } else {
+      body = '<p>There is no forecast to explain for the current filters.</p>';
+    }
+    return `<div class="ai-summary" style="margin-bottom:12px;">${body}</div>`;
   },
 
   render() {
@@ -204,6 +381,7 @@ const ForecastingPage = {
         </div>
       </div>
 
+
         <div class="section-grid fc-bottom-row">
         <div class="chart-card col-wide">
           <div class="toolbar-row" style="margin-bottom:12px;">
@@ -231,9 +409,9 @@ const ForecastingPage = {
           ${totalPages > 1 ? `<div class="pagination" id="forecast-pagination">${renderPaginationButtons(this.page, totalPages)}</div>` : ''}
         </div>
         <div class="chart-card col-narrow fc-alerts-card">
-          <div class="card-title" style="margin-bottom:14px;">Prediction Alerts${alerts.length ? ` (${alerts.length})` : ''}</div>
+          <div class="card-title" style="margin-bottom:14px;">Insights &amp; Alerts${alerts.length ? ` (${alerts.length})` : ''}</div>
           <div class="alerts-scroll">
-            <div class="alerts-list">${alerts.map((a) => `
+            <div class="alerts-list">${this.renderAiCard(hasForecast)}${alerts.map((a) => `
               <div class="feed-item">
                 <div class="feed-desc">${escapeHtml(a.description)}</div>
                 <div class="feed-time">${escapeHtml(a.timestamp)}</div>
@@ -285,6 +463,7 @@ const ForecastingPage = {
     });
     document.getElementById('btn-request-forecast')?.addEventListener('click', () => this.requestForecast());
     document.getElementById('forecast-report')?.addEventListener('click', () => ReportExport.forecast());
+    document.getElementById('fc-ai-btn')?.addEventListener('click', () => this.runAiSummary());
 
     this.drawTrendChart();
 
@@ -345,8 +524,8 @@ const ForecastingPage = {
     const top = rows[0];
     const bottom = rows[rows.length - 1];
     const parts = [`Of ${rows.length} brands, ${count('increasing')} are projected to grow, ${count('stable')} to stay stable and ${count('decreasing')} to decline.`];
-    if (top.projectedGrowthPercent > 0) parts.push(`${top.brand} leads at ${fmt(top.projectedGrowthPercent)}, making it a strong brand to prioritise for new consignments.`);
-    if (bottom.trend === 'decreasing') parts.push(`${bottom.brand} shows the largest drop (${fmt(bottom.projectedGrowthPercent)}); consider reviewing its pricing or how many items are accepted.`);
+    if (top.projectedGrowthPercent > 0) parts.push(`${top.brand} leads at ${fmt(top.projectedGrowthPercent)}, the strongest projected rise.`);
+    if (bottom.trend === 'decreasing') parts.push(`${bottom.brand} shows the largest drop (${fmt(bottom.projectedGrowthPercent)}); review its live listings and contract end dates.`);
     return parts.join(' ');
   },
 

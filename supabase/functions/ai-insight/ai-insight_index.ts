@@ -11,7 +11,8 @@ const MAX_FACTS = 30;
 const MAX_FACT_LENGTH = 300;
 
 const INSTRUCTION = [
-  'You write a short summary of business figures for the owner or manager of a luxury consignment business. Use plain, simple English.',
+  'You write a short summary of business figures for the owner or manager of Purse Maison, a luxury consignment business. Use plain, simple English.',
+  'How the business works: Purse Maison does not buy stock. It accepts every item that passes its consignment process (pre-intake, intake, authentication). Each published item has a consignment contract, usually 60 days. Prices are agreed with the consignor and can only change with the consignor\'s agreement.',
   'Rules for facts and numbers:',
   '- Use ONLY the facts you are given. If something is not in the facts, do not mention it.',
   '- Copy every number exactly as written, including symbols and units (for example ₱24.97M, 82%, 6.8 months).',
@@ -20,12 +21,16 @@ const INSTRUCTION = [
   '- Never give a reason or cause that is not stated in the facts. Do not guess about promotions, seasons, holidays or events.',
   '- A month that is marked as not over yet is a partial figure. Do not describe it as a final result.',
   '- If the facts say the view is limited to certain brands or a period, keep your wording within that scope.',
-  '- Do not suggest raising or lowering stock unless the facts say whether stock is high or low. If the facts support only two good suggestions, give two.',
-  '- Every suggestion must be a concrete action on a named brand, price, intake or stock level. Do not write vague suggestions such as "address" or "look into" a figure.',
+  'Rules for suggestions:',
+  '- Never suggest accepting, rejecting, prioritising or limiting consignments by brand.',
+  '- Never suggest buying, ordering, raising or reducing stock.',
+  '- Never suggest changing a price on its own. A price review is discussed with the consignor.',
+  '- Only suggest actions staff can take: review slow-moving or long-displayed listings with their consignors (price review, extension or pull-out), feature items in the showroom, website or social media posts, follow up with clients, or check a slow step in the consignment process. Only suggest an action the facts support.',
+  '- Every suggestion must name the specific figure or brand it is based on. Do not write vague suggestions such as "address" or "look into" a figure. If the facts support only two good suggestions, give two.',
   'Return JSON only, with three fields:',
   '- "overview": 1 or 2 sentences on what happened in the period. Start with sales, then the most notable month or change.',
-    '- "watch": 1 or 2 short sentences about the single most important risk or thing to keep an eye on. Choose it from the facts, such as a declining brand, slow-moving items, or stock that is large compared with sales. Do not call something a risk unless the facts show it.',
-  '- "consider": 2 or 3 suggestions, each under 20 words, each starting with a verb. Each suggestion must name the specific figure or brand it is based on and say what to prioritise, review or change. Focus on consignment and inventory decisions, such as which brand to prioritise for new consignments, which brand\'s pricing or intake to review, or whether to adjust stock. Do not suggest anything the facts do not support.',
+  '- "watch": 1 or 2 short sentences about the single most important thing to keep an eye on, chosen from the facts, such as a declining brand or slow-moving items. Do not call something a risk unless the facts show it.',
+  '- "consider": 2 or 3 suggestions, each under 20 words, each starting with a verb, following the rules for suggestions above.',
 ].join('\n');
 
 const SCHEMA = {
@@ -36,6 +41,39 @@ const SCHEMA = {
     consider: { type: 'ARRAY', items: { type: 'STRING' } },
   },
   required: ['overview', 'watch', 'consider'],
+};
+
+const FORECAST_INSTRUCTION = [
+  'You explain a sales forecast to the owner or manager of Purse Maison, a luxury consignment business. Use plain, simple English.',
+  'How the business works: Purse Maison does not buy stock. It accepts every item that passes its consignment process (pre-intake, intake, authentication). Each published item has a consignment contract, usually 60 days. Prices are agreed with the consignor and can only change with the consignor\'s agreement.',
+  'Rules for facts and numbers:',
+  '- Use ONLY the facts you are given. If something is not in the facts, do not mention it.',
+  '- Copy every number exactly as written, including symbols and units. Never calculate, round, convert or combine numbers.',
+  '- Forecasts are estimates. Say "projected" or "expected", never "will".',
+  '- A month marked as not over yet is a partial figure. Do not treat it as a final result.',
+  '- Never give a cause that is not in the facts. Do not guess about seasons, holidays, promotions or the market.',
+  '- If the facts say the view is limited to certain brands, stay within those brands.',
+  'Focus: pick only the two or three most important findings. Do not describe every brand or every figure.',
+  'Rules for suggestions:',
+  '- Never suggest accepting, rejecting, prioritising or limiting consignments by brand.',
+  '- Never suggest buying, ordering or reducing stock.',
+  '- Never suggest changing a price on its own. A price review is discussed with the consignor.',
+  '- Only suggest actions staff can take: contact consignors of listings near the end of their contract about a price review, an extension or a pull-out; feature listings in the showroom, website or social media posts; follow up with clients; plan staff time or payouts. Only suggest an action the facts support.',
+  '- If a brand\'s forecast reliability is low, say so and do not base a strong action on it.',
+  'Return JSON only, with three fields:',
+  '- "outlook" (Forecast Summary): 1 or 2 sentences on the overall projected direction and the single most important brand movement.',
+  '- "meaning" (Business Implications): 1 or 2 sentences on what this means for day-to-day work at Purse Maison, linked to the live listings in the facts.',
+  '- "actions" (Recommended Actions): 2 or 3 suggestions, each under 25 words, each starting with a verb and naming the brand or listings it is about.',
+].join('\n');
+
+const FORECAST_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    outlook: { type: 'STRING' },
+    meaning: { type: 'STRING' },
+    actions: { type: 'ARRAY', items: { type: 'STRING' } },
+  },
+  required: ['outlook', 'meaning', 'actions'],
 };
 
 function json(status: number, body: unknown) {
@@ -82,6 +120,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
+    const isForecast = body.mode === 'forecast';
     const facts: string[] = Array.isArray(body.facts)
       ? body.facts.map((f: unknown) => String(f).trim().slice(0, MAX_FACT_LENGTH)).filter(Boolean).slice(0, MAX_FACTS)
       : [];
@@ -96,13 +135,13 @@ Deno.serve(async (req) => {
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
         signal: controller.signal,
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: INSTRUCTION }] },
+          systemInstruction: { parts: [{ text: isForecast ? FORECAST_INSTRUCTION : INSTRUCTION }] },
           contents: [{ role: 'user', parts: [{ text: 'Facts:\n' + facts.map((f) => '- ' + f).join('\n') }] }],
           generationConfig: {
             temperature: 0.2,
             maxOutputTokens: 700,
             responseMimeType: 'application/json',
-            responseSchema: SCHEMA,
+            responseSchema: isForecast ? FORECAST_SCHEMA : SCHEMA,
           },
         }),
       });
@@ -118,12 +157,25 @@ Deno.serve(async (req) => {
 
     const data = await reply.json();
     const raw = data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('') ?? '';
-    let summary: { overview?: unknown; watch?: unknown; consider?: unknown };
+    let summary: Record<string, unknown>;
     try { summary = JSON.parse(raw); } catch (_) { return json(502, { error: 'unavailable' }); }
+    const list = (v: unknown) => (Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean).slice(0, 3) : []);
+
+    if (isForecast) {
+      const outlook = String(summary.outlook ?? '').trim();
+      const meaning = String(summary.meaning ?? '').trim();
+      const actions = list(summary.actions);
+      if (!outlook || !meaning || actions.length === 0) return json(502, { error: 'unavailable' });
+      if (!numbersAreFromFacts([outlook, meaning, ...actions].join(' '), facts)) {
+        console.error('AI forecast insight refused: it contained a number that is not in the facts');
+        return json(502, { error: 'unavailable' });
+      }
+      return json(200, { summary: { outlook, meaning, actions } });
+    }
 
     const overview = String(summary.overview ?? '').trim();
     const watch = String(summary.watch ?? '').trim();
-    const consider = Array.isArray(summary.consider) ? summary.consider.map((c) => String(c).trim()).filter(Boolean).slice(0, 3) : [];
+    const consider = list(summary.consider);
     if (!overview || !watch || consider.length === 0) return json(502, { error: 'unavailable' });
 
     if (!numbersAreFromFacts([overview, watch, ...consider].join(' '), facts)) {

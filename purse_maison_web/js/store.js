@@ -556,7 +556,7 @@ const DataStore = {
       if (s.projectedGrowthPercent >= ALERT_GROWTH_PERCENT) {
         alerts.push(`Demand for ${s.brand} is projected to rise ${s.projectedGrowthPercent}% over the next ${s.months} months.`);
       } else if (s.projectedGrowthPercent <= -ALERT_GROWTH_PERCENT) {
-        alerts.push(`Demand for ${s.brand} is projected to fall ${Math.abs(s.projectedGrowthPercent)}% over the next ${s.months} months. Consider reducing inventory.`);
+        alerts.push(`Demand for ${s.brand} is projected to fall ${Math.abs(s.projectedGrowthPercent)}% over the next ${s.months} months. Review its live listings and contract end dates.`);
       }
     }
     if (skipped.length) {

@@ -366,6 +366,7 @@ const DashboardPage = {
     Router.rerender();
     let next;
     try {
+            await sbClient.auth.getSession();   
       const { data, error } = await sbClient.functions.invoke('ai-insight', { body: { facts } });
       if (error) {
         let code = '';
