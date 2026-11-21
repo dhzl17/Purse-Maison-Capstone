@@ -115,7 +115,7 @@ const HELP_ARTICLES = [
     keywords: 'stages workflow pipeline status inquiry intake authentication photography design pricing approval published sold archived closed fake',
     intro: 'Every consigned item moves through the same stages. The database moves items to the next stage automatically once a step is complete, and refuses a save that breaks a rule.',
     steps: [
-      '**Inquiries & Pre-Intake** (Consignment Team): Customer Inquiry → Lead Qualification → Initial Photos → Price Negotiation → Consignment Approval → Appointment Scheduling → In Transit to Receiving.',
+      '**Inquiries & Pre-Intake** (Consignment Team): Customer Inquiry → Lead Qualification → Initial Photos → Price Negotiation → Consignment Approval → Appointment Scheduling → Awaiting Item Arrival.',
       '**Intake & Agreements** (Consignment Team): Received → Awaiting Auth. Payment.',
       '**Authentication Service** (Authenticators): Authentication Queue → Being Authenticated → Authentication Certificate.',
       '**Photography Tasks** (Photographers): Photography. **Design & Listing** (Designers): Photo Editing.',
