@@ -26,7 +26,27 @@ function formatAmount(amount) {
   }
   return out;
 }
+/** Only the digits of a typed amount, e.g. "250,000" -> "250000". */
+function amountDigits(value) {
+  return String(value ?? '').replace(/[^\d]/g, '');
+}
 
+function bindAmountInput(input, onChange) {
+  if (!input) return;
+  const show = (digits) => (digits ? formatAmount(Number(digits)) : '');
+  input.value = show(amountDigits(input.value));
+  input.addEventListener('input', () => {
+    const caret = input.selectionStart ?? input.value.length;
+    const digitsBeforeCaret = amountDigits(input.value.slice(0, caret)).length;
+    input.value = show(amountDigits(input.value).replace(/^0+(?=\d)/, ''));
+    let pos = 0;
+    for (let seen = 0; pos < input.value.length && seen < digitsBeforeCaret; pos++) {
+      if (/\d/.test(input.value[pos])) seen++;
+    }
+    if (document.activeElement === input) input.setSelectionRange(pos, pos);
+    if (onChange) onChange();
+  });
+}
 function parseAmountString(s) {
   const digits = String(s ?? '').replace(/[^0-9.]/g, '');
   const n = parseFloat(digits);

@@ -119,7 +119,7 @@ Object.assign(ConsignmentFlow, {
 
           <h3 style="font-size:14px; margin:18px 0 8px;">Final Selling Price</h3>
           <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-            <input class="field-input" id="price-input" type="number" min="1" step="100" value="${i.price ?? suggested ?? ''}" placeholder="e.g. 265000" style="max-width:220px;" ${act ? '' : 'disabled'}>
+            <input class="field-input" id="price-input" type="text" inputmode="numeric" autocomplete="off" value="${(i.price ?? suggested) != null ? formatAmount(i.price ?? suggested) : ''}" placeholder="e.g. 265,000" style="max-width:220px;" ${act ? '' : 'disabled'}>
             ${act ? '<button class="btn-confirm" id="price-save">Save Price</button>' : ''}
             ${act && suggested ? `<button class="btn-secondary" id="price-suggest" data-price="${suggested}">Suggest: ${this.peso(suggested)}</button>` : ''}
           </div>
@@ -154,7 +154,7 @@ Object.assign(ConsignmentFlow, {
     const box = document.getElementById('price-preview');
     const input = document.getElementById('price-input');
     if (!box || !input) return;
-    const price = Number(input.value);
+    const price = Number(amountDigits(input.value));
     if (!(price > 0)) { box.innerHTML = ''; return; }
     const p = this.pricePlan(price, i);
     if (!p) {
@@ -191,15 +191,16 @@ Object.assign(ConsignmentFlow, {
     this.fillPhotos('listing-photos');
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', () => fn(el)); };
     const input = document.getElementById('price-input');
-    if (input) input.addEventListener('input', () => this.updatePricePreview(i));
+    bindAmountInput(input, () => this.updatePricePreview(i));
     this.updatePricePreview(i);
 
     on('price-history', () => this.showHistory(i));
-    on('price-suggest', (btn) => { input.value = btn.dataset.price; this.updatePricePreview(i); });
+    on('price-suggest', (btn) => { input.value = formatAmount(Number(btn.dataset.price)); this.updatePricePreview(i); });
     on('price-save', (btn) => {
-      const price = Number(input.value);
+      const digits = amountDigits(input.value);
+      const price = Number(digits);
       const plan = this.pricePlan(price, i);
-      const problem = Validate.amount(input.value, 'Selling price')
+      const problem = Validate.amount(digits, 'Selling price')
         || (!plan ? 'No markup tier covers this price. Choose a price in a covered range.'
           : !plan.ok ? `Price must be at least ${this.peso(plan.minPrice)} (agreed payout plus platform fee).` : null);
       if (Validate.show(null, [[input, problem]])) return;
