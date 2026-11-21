@@ -4,7 +4,7 @@
  *
  *   Stage 15  Manager Approval: review authentication, photos and item details, then record a decision
  *             in manager_reviews. The database routes the item (Module 9):
- *               Approve -> Pricing & Markup · Reject -> Closed – Not Accepted
+ *             Approve -> Pricing & Markup
  *               Return (photos) -> Photo Editing · Return (item details) -> Receiving, for the Consignment Team
  *   Stage 18  Publish: listings the designer has submitted can be published. Publishing makes the listing
  *             live, starts the 60-day contract and queues the consignor notification (Modules 10, 13, 21).
@@ -100,15 +100,14 @@ Object.assign(ConsignmentFlow, {
             <button class="btn-confirm" id="mgr-approve" style="width:100%;">Approve</button>
             <div style="margin-top:16px; padding-top:12px; border-top:1px solid #E2E8F0;">
               <div class="field-group">
-                <label class="field-label">Return for revision</label>
+                <label class="field-label">Needs Fixing</label>
                 <select class="field-input" id="mgr-return-reason">
                   <option value="">— What needs fixing? —</option>
                   ${Object.entries(RETURN_REASONS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}
                 </select>
               </div>
-              <textarea class="field-input" id="mgr-notes" rows="3" placeholder="Notes for the team (required to return or reject)"></textarea>
-              <button class="btn-secondary" id="mgr-return" style="width:100%; margin-top:6px;">Return for Revision</button>
-              <button class="btn-secondary" id="mgr-reject" style="width:100%; margin-top:6px; color:var(--danger-red);">Reject Item</button>
+              <textarea class="field-input" id="mgr-notes" rows="3" placeholder="Notes for the team (required for Needs Fixing)"></textarea>
+              <button class="btn-secondary" id="mgr-return" style="width:100%; margin-top:6px;">Needs Fixing</button>
             </div>` : '<p class="cell-muted">Only the manager or owner can decide.</p>'}
           ${past.length ? `
             <div style="margin-top:16px; padding-top:12px; border-top:1px solid #E2E8F0;">
@@ -205,13 +204,6 @@ Object.assign(ConsignmentFlow, {
       ])) return;
       decide(btn, 'returned_for_revision', { return_reason: reason, notes: n },
         reason === 'photos' ? `${i.code} returned to Design.` : `${i.code} returned to the Consignment Team for item details.`);
-    });
-
-    on('mgr-reject', (btn) => {
-      const n = notes();
-      if (Validate.show(panel(btn), [[notesEl(), n ? notesProblem() : 'Write the reason for rejecting this item.']])) return;
-      this.confirm('Reject this item?', `${i.code} will be closed as not accepted and should be returned to the consignor. This cannot be undone.`,
-        'Reject Item', () => decide(btn, 'rejected', { notes: n }, `${i.code} rejected.`));
     });
 
     on('mgr-publish', (btn) => {
