@@ -62,6 +62,7 @@ const CONSIGNMENT_STEPS = [
   ['Manager Approval', ['manager_approval']],
   ['Pricing', ['pricing_markup']],
   ['Listing', ['listing_creation']],
+  ['Publish', []],
 ];
 
 const LEAD_STATUSES = {
@@ -175,6 +176,7 @@ const ConsignmentFlow = {
     let at = steps.findIndex(([, stages]) => stages.includes(i.stage));
     let failed = false;
     let note = '';
+    if (i.stage === 'listing_creation' && i.listing && i.listing.submitted_at) at = 8;
     if (i.stage === 'closed_fake') { at = 2; failed = true; note = 'Closed – did not pass authentication.'; }
     else if (i.stage === 'closed_rejected') {
       const byManager = (i.managerReviews || []).some((r) => r.decision === 'rejected');
@@ -185,7 +187,8 @@ const ConsignmentFlow = {
       const cls = n < at ? 'done' : n === at ? (failed ? 'failed' : 'current') : '';
       return `<div class="pm-step ${cls}" title="Step ${n + 1}: ${name}"><div class="pm-bar"></div><span class="pm-num">Step ${n + 1}</span><span class="pm-name">${name}</span></div>`;
     }).join('');
-    const where = note || `Step ${at + 1} of ${steps.length}: ${steps[at][0]} – ${STAGE_LABELS[i.stage] || i.stage}`;
+    const label = at === 8 ? 'Ready to Publish' : (STAGE_LABELS[i.stage] || i.stage);
+    const where = note || `Step ${at + 1} of ${steps.length}: ${steps[at][0]} – ${label}`;
     return `<div class="pm-progress" aria-label="Consignment progress">${cells}</div><div class="pm-progress-note${failed ? ' failed' : ''}">${escapeHtml(where)}</div>`;
   },
 
@@ -857,8 +860,6 @@ const ConsignmentFlow = {
     const rows = error ? [] : data;
     overlay.querySelector('.modal-body').innerHTML = `
       <div style="font-size:12.5px; margin-bottom:10px;"><strong>${escapeHtml(this.itemName(item))}</strong> · ${escapeHtml(item.consignor.full_name)}</div>
-      ${this.progressBar(item)}
-      <div style="margin-bottom:12px;"></div>
       ${error ? `<p class="cell-muted">Could not load the log: ${escapeHtml(this.friendly(error))}</p>` : ''}
       <div class="table-scroll"><table class="data-table">
         <thead><tr><th>When</th><th>From</th><th>To</th><th>By</th></tr></thead>

@@ -18,8 +18,8 @@ const NAV_ITEMS = [
       { label: 'Authentication Service', route: 'consignment-auth' },
       { label: 'Photography Tasks', route: 'consignment-photo' },
       { label: 'Design & Listing', route: 'consignment-design' },
-      { label: 'Pricing & Markup', route: 'consignment-pricing' },
       { label: 'Manager Approvals', route: 'consignment-approval' },
+      { label: 'Pricing & Markup', route: 'consignment-pricing' },
       { label: 'Sales & Payouts', route: 'consignment-sales' },
     ]
   },
