@@ -28,7 +28,7 @@ const ForecastingPage = {
   /** Shorter forecast periods to offer (the full forecast is always the last choice). */
   monthOptions() {
     const max = DB.forecastMeta.horizon || 0;
-    return [3, 6, 12].filter((n) => n < max);
+    return [1, 3, 6, 9, 12].filter((n) => n < max);
   },
 
   /**
@@ -81,9 +81,9 @@ const ForecastingPage = {
     for (const s of rows) {
       if (s.projectedGrowthPercent === null) continue;
       if (s.projectedGrowthPercent >= ALERT_GROWTH_PERCENT) {
-        alerts.push(`Demand for ${s.brand} is projected to rise ${s.projectedGrowthPercent}% over the next ${s.months} months.`);
+        alerts.push(`Demand for ${s.brand} is projected to rise ${s.projectedGrowthPercent}% over the next ${s.months} month${s.months === 1 ? '' : 's'}.`);
       } else if (s.projectedGrowthPercent <= -ALERT_GROWTH_PERCENT) {
-        alerts.push(`Demand for ${s.brand} is projected to fall ${Math.abs(s.projectedGrowthPercent)}% over the next ${s.months} months. Consider reducing inventory.`);
+        alerts.push(`Demand for ${s.brand} is projected to fall ${Math.abs(s.projectedGrowthPercent)}% over the next ${s.months} month${s.months === 1 ? '' : 's'}. Consider reducing inventory.`);
       }
     }
     if (meta.skipped && meta.skipped.length) {
@@ -162,8 +162,8 @@ const ForecastingPage = {
           ${hasForecast ? renderTreeFilter('forecast-months', {
             label: 'Forecast Period',
             items: [
-              ...this.monthOptions().map((n) => ({ value: n, label: `Next ${n} Months` })),
-              { value: 'all', label: meta.horizon ? `Next ${meta.horizon} Months` : 'All Months' },
+              ...this.monthOptions().map((n) => ({ value: n, label: `Next ${n} Month${n === 1 ? '' : 's'}` })),
+              { value: 'all', label: meta.horizon ? `Next ${meta.horizon} Month${meta.horizon === 1 ? '' : 's'}` : 'All Months' },
             ],
             selected: this.selectedMonths,
             single: true,

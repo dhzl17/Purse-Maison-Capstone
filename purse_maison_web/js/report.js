@@ -194,7 +194,7 @@ const ReportExport = {
     const filters = [
       ['Brands', page.selectedBrands === null ? 'All brands' : rows.map((r) => r.brand).join(', ') || 'None'],
       ['Trend', page.selectedTrends === null ? 'All trends' : page.selectedTrends.map((t) => trendNames[t]).join(', ')],
-      ['Forecast period', months ? `Next ${months} months` : 'No forecast yet'],
+      ['Forecast period', months ? `Next ${months} month${months === 1 ? '' : 's'}` : 'No forecast yet'],
       ['Forecast generated', meta.generatedAt ? DataStore.formatDateTime(meta.generatedAt) : '—'],
       ['Model', `ARIMA${meta.avgMae !== null ? ` · average error (MAE) ${this.peso(meta.avgMae)}` : ''}`],
     ];
